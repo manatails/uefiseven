@@ -193,9 +193,10 @@ UefiMain (
 	// Double check if the handler has been installed properly
 	//
 	if (IsInt10hHandlerDefined()) {
-		PrintDebug(L"Int10h sanity check success\n");
+		PrintDebug(L"Pre-boot Int10h sanity check success\n");
 	} else {
-	    PrintError(L"Int10h sanity check failed\n");
+		PrintError(L"Pre-boot Int10h sanity check failed\n");
+		PrintError(L"Press Enter to continue.\n");
         WaitForEnter(FALSE);
 	}
 
