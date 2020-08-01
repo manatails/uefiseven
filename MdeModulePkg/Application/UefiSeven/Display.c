@@ -235,6 +235,7 @@ SwitchVideoMode(
 	UINT32                                  i;
 	EFI_GRAPHICS_OUTPUT_MODE_INFORMATION	*ModeInfo;
 	UINTN                                   SizeOfInfo;
+    BOOLEAN                                 MatchFound = FALSE;
 
 	if (EFI_ERROR(EnsureDisplayAvailable())) {
 		PrintDebug(L"No display adapters found, unable to switch video mode.\n");
@@ -256,6 +257,8 @@ SwitchVideoMode(
 				if (ModeInfo->PixelFormat == PixelBlueGreenRedReserved8BitPerColor ||
 					ModeInfo->PixelFormat == PixelRedGreenBlueReserved8BitPerColor) {
 
+                    MatchFound = TRUE;
+
 					Status = DisplayInfo.GOP->SetMode(DisplayInfo.GOP, i);
 					if (EFI_ERROR(Status)) {
 						PrintError(L"Failed to switch to Mode %u with desired %ux%u resolution.\n", i, Width, Height);
@@ -276,6 +279,11 @@ SwitchVideoMode(
 	DisplayInfo.FrameBufferSize = DisplayInfo.GOP->Mode->FrameBufferSize;
 
 	gST->ConOut->ClearScreen(gST->ConOut);
+
+    if (!MatchFound) {
+        PrintError(L"Resolution %ux%u not supported.\n", Width, Height);
+    }
+
 	return Status;
 }
 
@@ -318,6 +326,30 @@ PrintVideoInfo()
 			}
 		}
 	}
+}
+
+/**
+  Prints important information about the currently running video
+  mode. Initializes adapters if they have not yet been detected.
+
+**/
+BOOLEAN
+MatchCurrentResolution(
+	IN UINTN Width,
+	IN UINTN Height
+)
+{
+	if (EFI_ERROR(EnsureDisplayAvailable())) {
+		PrintDebug(L"No display adapters found, unable to print display information\n");
+		return FALSE;
+	}
+
+    if (DisplayInfo.HorizontalResolution == Width && DisplayInfo.VerticalResolution == Height) {
+        return TRUE;
+    }
+    else {
+        return FALSE;
+    }
 }
 
 

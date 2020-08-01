@@ -84,8 +84,10 @@ UefiMain (
 	if (!EFI_ERROR(Status) && Key.UnicodeChar == L'v') {
 		VerboseMode = TRUE;
 	}
+
+	PrintDebug(L"UefiSeven %s\n", VERSION);
+
 	if (VerboseMode) {
-		PrintDebug(L"UefiSeven %s\n", VERSION);
 		PrintDebug(L"You are running in verbose mode, press Enter to continue\n");
 		WaitForEnter(FALSE);
 	}
@@ -104,6 +106,12 @@ UefiMain (
 	if (VerboseMode) {
 		PrintVideoInfo();
 	}
+
+    if(!MatchCurrentResolution(1024, 768)) {
+        PrintError(L"Current display does not seem to support changing to 1024x768 resolution\n");
+        PrintError(L"which is the minimum requirement of Windows 7.\n");
+        PrintError(L"It is likely that Windows might fail to boot even with the handler installed.\n");
+    }
 
 	//
 	// If an Int10h handler exists there either is a real
@@ -526,8 +534,8 @@ EnsureMemoryLock(
 	// None of the methods worked?
 	// 
 	if (EFI_ERROR(Status)) {
-		PrintError(L"Unable to find a way to %s memory at %x\n", 
-			Operation == UNLOCK ? L"unlock" : L"lock", StartAddress);
+		PrintError(L"Unable to find a way to %s memory at %x. Proceeding without %sing...\n", 
+			Operation == UNLOCK ? L"unlock" : L"lock", StartAddress, Operation == UNLOCK ? L"unlock" : L"lock");
 	}
 	
 	return Status;
