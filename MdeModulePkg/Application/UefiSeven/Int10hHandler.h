@@ -590,10 +590,10 @@ STATIC CONST UINT8 INT10H_HANDLER[] = {
   /* 00000280 mov al,0x30                    */  0xB0, 0x30,
   /* 00000282 jmp short 0x286                */  0xEB, 0x02,
   /* 00000284 mov al,0x20                    */  0xB0, 0x20,
-  /* 00000286 iret                           */  0xCF,
+  /* 00000286 iretw                          */  0xCF,
   /* 00000287 mov ax,0x4f                    */  0xB8, 0x4F, 0x00,
-  /* 0000028A iret                           */  0xCF,
+  /* 0000028A iretw                          */  0xCF,
   /* 0000028B mov ax,0x14f                   */  0xB8, 0x4F, 0x01,
-  /* 0000028E iret                           */  0xCF,
+  /* 0000028E iretw                          */  0xCF,
 };
 #endif
