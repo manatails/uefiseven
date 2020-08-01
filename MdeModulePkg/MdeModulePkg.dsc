@@ -103,6 +103,11 @@
   VarCheckLib|MdeModulePkg/Library/VarCheckLib/VarCheckLib.inf
   FileExplorerLib|MdeModulePkg/Library/FileExplorerLib/FileExplorerLib.inf
 
+  # Libraries for UefiSeven
+  CpuLib|MdePkg/Library/BaseCpuLib/BaseCpuLib.inf
+  MtrrLib|UefiCpuPkg/Library/MtrrLib/MtrrLib.inf
+  EdkProtocolLib|EdkCompatibilityPkg/Foundation/Protocol/EdkProtocolLib.inf
+
 [LibraryClasses.EBC.PEIM]
   IoLib|MdePkg/Library/PeiIoLibCpuIo/PeiIoLibCpuIo.inf
 
@@ -209,6 +214,7 @@
 [Components]
   MdeModulePkg/Application/HelloWorld/HelloWorld.inf
   MdeModulePkg/Application/MemoryProfileInfo/MemoryProfileInfo.inf
+  MdeModulePkg/Application/UefiSeven/UefiSeven.inf
 
   MdeModulePkg/Bus/Pci/PciHostBridgeDxe/PciHostBridgeDxe.inf
   MdeModulePkg/Bus/Pci/PciSioSerialDxe/PciSioSerialDxe.inf
