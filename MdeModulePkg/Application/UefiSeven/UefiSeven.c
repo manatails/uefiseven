@@ -180,7 +180,17 @@ UefiMain (
 		PrintError(L"Press Enter to try to continue.\n");
 		WaitForEnter(FALSE);
 	}
-	
+
+	//
+	// Double check if the handler has been installed properly
+	//
+	if (IsInt10hHandlerDefined()) {
+		PrintDebug(L"Int10h sanity check success\n");
+	} else {
+	    PrintError(L"Int10h sanity check failed\n");
+        WaitForEnter(FALSE);
+	}
+
 Exit:
 	//
 	// Check if we can chainload the Windows Boot Manager.
