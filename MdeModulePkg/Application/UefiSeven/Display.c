@@ -263,13 +263,13 @@ SwitchVideoMode(
 					if (EFI_ERROR(Status)) {
 						PrintError(L"Failed to switch to Mode %u with desired %ux%u resolution.\n", i, Width, Height);
 					} else {
+						PrintDebug(L"Set mode %u with desired %ux%u resolution.\n", i, Width, Height);
 						break;
 					}
 				}
 			}
 		}
 	}
-
 	// Refresh DisplayInfo
 	DisplayInfo.HorizontalResolution = DisplayInfo.GOP->Mode->Info->HorizontalResolution;
 	DisplayInfo.VerticalResolution = DisplayInfo.GOP->Mode->Info->VerticalResolution;
@@ -523,7 +523,7 @@ ClearScreen()
 		return;
 	}
 
-	SwtichToGraphics(FALSE);
+	SwitchToGraphics(FALSE);
 
 	if (DisplayInfo.Protocol == GOP) {
 		DisplayInfo.GOP->Blt(
@@ -568,7 +568,7 @@ DrawImage(
 		return;
 	}
 
-	SwtichToGraphics(FALSE);
+	SwitchToGraphics(FALSE);
 
 	if (DisplayInfo.Protocol == GOP) {
 		DisplayInfo.GOP->Blt(DisplayInfo.GOP, 
@@ -671,7 +671,7 @@ SwitchToText(
 
 
 VOID
-SwtichToGraphics(
+SwitchToGraphics(
 	IN	BOOLEAN	Force)
 {
 	

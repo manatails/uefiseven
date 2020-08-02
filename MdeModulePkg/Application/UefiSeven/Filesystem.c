@@ -79,6 +79,36 @@ ChangeExtension(
 	return EFI_SUCCESS;
 }
 
+EFI_STATUS
+GetFilenameInSameDirectory(
+	IN	CHAR16	*CurrentFilePath,
+	IN	CHAR16	*NewFileName,
+	OUT	VOID	**NewFilePath)
+{
+	UINTN	EndingSlashIndex;
+	UINTN	NewFileNameLen = StrLen(NewFileName);
+
+	*NewFilePath = 0;
+	EndingSlashIndex = StrLen(CurrentFilePath) - 1;
+	while ((CurrentFilePath[EndingSlashIndex] != L'\\') && (EndingSlashIndex != 0)) {
+		EndingSlashIndex--;
+	}
+
+	if (EndingSlashIndex == 0)
+		return EFI_INVALID_PARAMETER;
+
+	EndingSlashIndex++;
+
+	*NewFilePath = (CHAR16*)AllocateZeroPool((EndingSlashIndex + NewFileNameLen + 1) * sizeof(CHAR16));
+	if (*NewFilePath == NULL)
+		return EFI_OUT_OF_RESOURCES;
+
+	CopyMem((CHAR16 *)*NewFilePath, CurrentFilePath, (EndingSlashIndex) * sizeof(CHAR16));
+	CopyMem(((CHAR16 *)*NewFilePath) + EndingSlashIndex, NewFileName, NewFileNameLen * sizeof(CHAR16));
+	
+	return EFI_SUCCESS;
+}
+
 
 /**
   Checks whether a file located at a specified path exists on the 

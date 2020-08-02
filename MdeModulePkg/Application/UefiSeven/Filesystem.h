@@ -54,6 +54,12 @@ ChangeExtension(
 	OUT	VOID	**NewFilePath);
 
 EFI_STATUS
+GetFilenameInSameDirectory(
+	IN	CHAR16	*CurrentFilePath,
+	IN	CHAR16	*NewFileName,
+	OUT	VOID	**NewFilePath);
+
+EFI_STATUS
 FileRead(
 	IN	CHAR16	*FilePath,
 	OUT	VOID	**FileContents,

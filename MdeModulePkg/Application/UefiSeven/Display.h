@@ -123,7 +123,7 @@ MatchCurrentResolution(
 );
 
 VOID
-SwtichToGraphics(
+SwitchToGraphics(
 	IN	BOOLEAN	Force);
 
 VOID DestroyImage(

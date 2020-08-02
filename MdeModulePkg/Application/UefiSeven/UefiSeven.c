@@ -58,6 +58,8 @@ UefiMain (
 	EFI_STATUS				IvtAllocationStatus;
 	EFI_INPUT_KEY			Key;
 	CHAR16					*LaunchPath = NULL;
+	CHAR16					*EfiFilePath = NULL;
+	CHAR16					*VerboseFilePath = NULL;
 
 	//
 	// Claim real mode IVT memory area before any allocation can
@@ -78,10 +80,17 @@ UefiMain (
 	}
 
 	//
-	// Check if we should run in verbose mode ('v' pressed).
+	// Check if we should run in verbose mode (directory contains .verbose file or 'v' is pressed).
 	//
 	Status = gST->ConIn->ReadKeyStroke(gST->ConIn, &Key);
 	if (!EFI_ERROR(Status) && Key.UnicodeChar == L'v') {
+		VerboseMode = TRUE;
+	}
+
+	EfiFilePath = PathCleanUpDirectories(ConvertDevicePathToText(UefiSevenImageInfo->FilePath, FALSE, FALSE));
+	Status = GetFilenameInSameDirectory(EfiFilePath, L"UefiSeven.verbose", (VOID **)&VerboseFilePath);
+	FreePool(EfiFilePath);
+	if (!EFI_ERROR(Status) && FileExists(VerboseFilePath)) {
 		VerboseMode = TRUE;
 	}
 
@@ -621,7 +630,7 @@ ShowAnimatedLogo()
 	}
 
 	// All fine, let's do some drawing.
-	SwtichToGraphics(FALSE);
+	SwitchToGraphics(FALSE);
 	ClearScreen();
 	AnimateImage(WindowsFlag);
 
