@@ -12,7 +12,7 @@ Int10h handler comes with a macro, when enabled before compiling, that will enab
 
 ## Usage instructions
 1. Prepare Windows 7 installation USB Drive
-2. Rename bootx64.efi at (UsbDrive)\EFI\Boot\ to bootx64_original.efi
+2. Rename bootx64.efi at (UsbDrive)\EFI\Boot\ to bootx64.original.efi
 3. Unpack bootx64.efi from UefiSeven archive and copy it to (UsbDrive)\EFI\Boot\
 4. (Optional) Copy UefiSeven.verbose to the same directory to enable verbose mode
 5. After Installation, follow steps 2-4 for the EFI partition of your system drive using an EFI Shell

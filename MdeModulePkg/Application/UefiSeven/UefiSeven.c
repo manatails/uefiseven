@@ -218,13 +218,13 @@ Exit:
 	// Check if we can chainload the Windows Boot Manager.
 	//
 	EfiFilePath = PathCleanUpDirectories(ConvertDevicePathToText(UefiSevenImageInfo->FilePath, FALSE, FALSE));
-	Status = GetFilenameInSameDirectory(EfiFilePath, L"bootx64_original.efi", (VOID **)&LaunchPath);
+	Status = ChangeExtension(EfiFilePath, L"original.efi", (VOID **)&LaunchPath);
 	FreePool(EfiFilePath);
 	if (!EFI_ERROR(Status) && FileExists(LaunchPath)) {
 		PrintDebug(L"Found Windows Boot Manager at '%s'\n", LaunchPath);
 	} else {
 		PrintError(L"Could not find Windows Boot Manager at '%s'\n", LaunchPath);
-		PrintError(L"Rename the original bootx64.efi from efi\\boot\\ to bootx64_original.efi\n");
+		//PrintError(L"Rename the original bootx64.efi from efi\\boot\\ to bootx64.original.efi\n");
 		PrintError(L"Press Enter to continue.\n");
 		WaitForEnter(FALSE);
 	}
