@@ -270,6 +270,7 @@ SwitchVideoMode(
 			}
 		}
 	}
+
 	// Refresh DisplayInfo
 	DisplayInfo.HorizontalResolution = DisplayInfo.GOP->Mode->Info->HorizontalResolution;
 	DisplayInfo.VerticalResolution = DisplayInfo.GOP->Mode->Info->VerticalResolution;
@@ -286,6 +287,65 @@ SwitchVideoMode(
 
 	return Status;
 }
+
+EFI_STATUS
+ForceVideoModeHack(
+	IN UINTN Width,
+	IN UINTN Height
+) {
+	EFI_STATUS                              Status = EFI_DEVICE_ERROR;
+	UINT32                                      OrigHorizontalResolution;
+	UINT32                                      OrigVerticalResolution;
+	UINT32                                      OrigPixelsPerScanLine;
+	UINT32                                      OrigFrameBufferSize;
+	UINT32                                      NewHorizontalResolution;
+	UINT32                                      NewVerticalResolution;
+	UINT32                                      NewPixelsPerScanLine;
+	UINT32                                      NewFrameBufferSize;
+	UINT32                                      ScanlineScale = 1;
+
+	if (EFI_ERROR(EnsureDisplayAvailable())) {
+		PrintDebug(L"No display adapters found, unable to switch video mode.\n");
+		return EFI_DEVICE_ERROR;
+	}
+
+	if (DisplayInfo.Protocol != GOP) {
+		PrintError(L"Video mode switching is not supported on UGA display adapters.\n");
+		return EFI_UNSUPPORTED;
+	}
+	
+	// Save old settings
+	OrigHorizontalResolution = DisplayInfo.GOP->Mode->Info->HorizontalResolution;
+	OrigVerticalResolution = DisplayInfo.GOP->Mode->Info->VerticalResolution;
+	OrigPixelsPerScanLine = DisplayInfo.GOP->Mode->Info->PixelsPerScanLine;
+	OrigFrameBufferSize = DisplayInfo.GOP->Mode->FrameBufferSize;
+	
+	NewHorizontalResolution = Width;
+	NewVerticalResolution = Height;
+	while (OrigPixelsPerScanLine * ScanlineScale < Width)
+		ScanlineScale++;
+	NewPixelsPerScanLine = OrigPixelsPerScanLine * ScanlineScale; // Should be bigger than HorizontalResolution
+	NewFrameBufferSize = NewPixelsPerScanLine * NewVerticalResolution * 4; // PixelsPerScanLine * VerticalResolution * 4
+	
+	DisplayInfo.GOP->Mode->Info->HorizontalResolution = NewHorizontalResolution;
+	DisplayInfo.GOP->Mode->Info->VerticalResolution = NewVerticalResolution;
+	//DisplayInfo.GOP->Mode->Info->PixelFormat = 1;
+	DisplayInfo.GOP->Mode->Info->PixelsPerScanLine = NewPixelsPerScanLine;
+	DisplayInfo.GOP->Mode->FrameBufferSize = NewFrameBufferSize;
+	
+	// Refresh DisplayInfo
+	DisplayInfo.HorizontalResolution = DisplayInfo.GOP->Mode->Info->HorizontalResolution;
+	DisplayInfo.VerticalResolution = DisplayInfo.GOP->Mode->Info->VerticalResolution;
+	DisplayInfo.PixelFormat = DisplayInfo.GOP->Mode->Info->PixelFormat;
+	DisplayInfo.PixelsPerScanLine = DisplayInfo.GOP->Mode->Info->PixelsPerScanLine;
+	DisplayInfo.FrameBufferBase = DisplayInfo.GOP->Mode->FrameBufferBase;
+	DisplayInfo.FrameBufferSize = DisplayInfo.GOP->Mode->FrameBufferSize;
+
+	gST->ConOut->ClearScreen(gST->ConOut);
+
+	return Status;
+}
+
 
 /**
   Prints important information about the currently running video

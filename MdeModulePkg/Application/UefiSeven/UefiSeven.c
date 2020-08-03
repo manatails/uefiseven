@@ -120,6 +120,10 @@ UefiMain (
         PrintError(L"Current display does not seem to support changing to 1024x768 resolution\n");
         PrintError(L"which is the minimum requirement of Windows 7.\n");
         PrintError(L"It is likely that Windows might fail to boot even with the handler installed.\n");
+		PrintError(L"Press Enter to try a new 'hack' that will force the display driver to work.\n");
+		PrintError(L"The display might be glitchy but it will be able to provide a workable screen.\n");
+		WaitForEnter(FALSE);
+		ForceVideoModeHack(1024, 768);
     }
 
 	//

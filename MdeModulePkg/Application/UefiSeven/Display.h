@@ -116,6 +116,12 @@ SwitchVideoMode(
 	IN UINTN Height
 );
 
+EFI_STATUS
+ForceVideoModeHack(
+	IN UINTN Width,
+	IN UINTN Height
+);
+
 BOOLEAN
 MatchCurrentResolution(
 	IN UINTN Width,
