@@ -15,7 +15,9 @@ Int10h handler comes with a macro, when enabled before compiling, that will enab
 2. Rename bootx64.efi at (UsbDrive)\EFI\Boot\ to bootx64.original.efi
 3. Unpack bootx64.efi from UefiSeven archive and copy it to (UsbDrive)\EFI\Boot\
 4. (Optional) Copy UefiSeven.verbose to the same directory to enable verbose mode
-5. After Installation, follow steps 2-4 for the EFI partition of your system drive using an EFI Shell
+5. Install Windows
+6. Rename bootmgfw.efi at (HDD)\EFI\Microsoft\Boot\ to bootmgfw.original.efi
+7. Copy UefiSeven bootx64.efi to (HDD)\EFI\Microsoft\Boot\bootmgfw.efi using EFI shell
 
 ## Build instructions
     git clone https://git.mananet.net/manatails/uefiseven
