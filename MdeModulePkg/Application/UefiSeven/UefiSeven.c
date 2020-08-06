@@ -31,6 +31,7 @@ DISPLAY_INFO					DisplayInfo;
 EFI_HANDLE						UefiSevenImage;
 EFI_LOADED_IMAGE_PROTOCOL		*UefiSevenImageInfo;
 BOOLEAN							VerboseMode = FALSE;
+BOOLEAN							SkipErrors = FALSE;
 
 
 /**
@@ -60,6 +61,7 @@ UefiMain (
 	CHAR16					*LaunchPath = NULL;
 	CHAR16					*EfiFilePath = NULL;
 	CHAR16					*VerboseFilePath = NULL;
+	CHAR16					*SkipFilePath = NULL;
 
 	//
 	// Claim real mode IVT memory area before any allocation can
@@ -77,6 +79,16 @@ UefiMain (
 	if (EFI_ERROR(Status)) {
 		PrintError(L"Unable to locate EFI_LOADED_IMAGE_PROTOCOL, aborting\n");
 		goto Exit;
+	}
+
+	//
+	// Check if we should skip warnings and prompts
+	//
+	EfiFilePath = PathCleanUpDirectories(ConvertDevicePathToText(UefiSevenImageInfo->FilePath, FALSE, FALSE));
+	Status = GetFilenameInSameDirectory(EfiFilePath, L"UefiSeven.skiperrors", (VOID **)&SkipFilePath);
+	FreePool(EfiFilePath);
+	if (!EFI_ERROR(Status) && FileExists(SkipFilePath)) {
+		SkipErrors = TRUE;
 	}
 
 	//
@@ -122,7 +134,8 @@ UefiMain (
         PrintError(L"It is likely that Windows might fail to boot even with the handler installed.\n");
 		PrintError(L"Press Enter to try a new 'hack' that will force the display driver to work.\n");
 		PrintError(L"The display might be glitchy but it will be able to provide a workable screen.\n");
-		WaitForEnter(FALSE);
+		if(!SkipErrors)
+			WaitForEnter(FALSE);
 		ForceVideoModeHack(1024, 768);
     }
 
@@ -199,7 +212,8 @@ UefiMain (
 			IvtInt10hHandlerEntry->Segment, IvtInt10hHandlerEntry->Offset,
 			NewInt10hHandlerEntry.Segment, NewInt10hHandlerEntry.Offset);
 		PrintError(L"Press Enter to try to continue.\n");
-		WaitForEnter(FALSE);
+		if(!SkipErrors)
+			WaitForEnter(FALSE);
 	}
 
 	//
@@ -210,7 +224,8 @@ UefiMain (
 	} else {
 		PrintError(L"Pre-boot Int10h sanity check failed\n");
 		PrintError(L"Press Enter to continue.\n");
-        WaitForEnter(FALSE);
+		if(!SkipErrors)
+			WaitForEnter(FALSE);
 	}
 
 Exit:
