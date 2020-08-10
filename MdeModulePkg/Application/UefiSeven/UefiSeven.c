@@ -57,11 +57,17 @@ UefiMain (
 	EFI_PHYSICAL_ADDRESS	IvtAddress;
 	EFI_STATUS				Status;
 	EFI_STATUS				IvtAllocationStatus;
+	EFI_STATUS				IvtFreeStatus;
 	EFI_INPUT_KEY			Key;
 	CHAR16					*LaunchPath = NULL;
 	CHAR16					*EfiFilePath = NULL;
 	CHAR16					*VerboseFilePath = NULL;
 	CHAR16					*SkipFilePath = NULL;
+
+	//
+	// Try freeing IVT memory area in case it has already been allocated.
+	//
+	IvtFreeStatus = gBS->FreePages(IVT_ADDRESS, 1);
 
 	//
 	// Claim real mode IVT memory area before any allocation can
@@ -70,6 +76,8 @@ UefiMain (
 	//
 	IvtAddress = IVT_ADDRESS;
 	IvtAllocationStatus = gBS->AllocatePages(AllocateAddress, EfiBootServicesCode, 1, &IvtAddress);
+
+	PrintDebug(L"Force free IVT area result: %r\n", IvtFreeStatus);
 
 	//
 	// Initialization.
