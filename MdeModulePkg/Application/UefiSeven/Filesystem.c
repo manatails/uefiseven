@@ -94,7 +94,7 @@ GetFilenameInSameDirectory(
 		EndingSlashIndex--;
 	}
 
-	if (EndingSlashIndex == 0)
+	if (EndingSlashIndex == 0 && (CurrentFilePath[EndingSlashIndex] != L'\\'))
 		return EFI_INVALID_PARAMETER;
 
 	EndingSlashIndex++;
