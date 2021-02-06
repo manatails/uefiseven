@@ -21,6 +21,12 @@ Int10h handler comes with a macro, when enabled before compiling, that will enab
 8. Copy UefiSeven bootx64.efi to (HDD)\EFI\Microsoft\Boot\bootmgfw.efi using EFI shell
 9. (Optional) Copy UefiSeven.skiperrors to the same directory to ignore any warning prompts.
 
+## Settings
+Currently settings can be applied by creating empty files of specific name in the directory containing the main efi file.
+* UefiSeven.verbose : Enables verbose mode
+* UefiSeven.skiperrors : Skips any warning/error prompts
+* UefiSeven.force_fakevesa : Overwrites Int10h handler with fakevesa even when the native handler is present
+
 ## Build instructions
     git clone https://git.mananet.net/manatails/uefiseven
     cd UefiSeven

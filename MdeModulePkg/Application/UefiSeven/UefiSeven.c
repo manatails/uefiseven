@@ -32,6 +32,7 @@ EFI_HANDLE						UefiSevenImage;
 EFI_LOADED_IMAGE_PROTOCOL		*UefiSevenImageInfo;
 BOOLEAN							VerboseMode = FALSE;
 BOOLEAN							SkipErrors = FALSE;
+BOOLEAN							ForceFakevesa = FALSE;
 
 
 /**
@@ -63,6 +64,7 @@ UefiMain (
 	CHAR16					*EfiFilePath = NULL;
 	CHAR16					*VerboseFilePath = NULL;
 	CHAR16					*SkipFilePath = NULL;
+	CHAR16					*FFVFilePath = NULL;
 
 	//
 	// Try freeing IVT memory area in case it has already been allocated.
@@ -97,6 +99,16 @@ UefiMain (
 	FreePool(EfiFilePath);
 	if (!EFI_ERROR(Status) && FileExists(SkipFilePath)) {
 		SkipErrors = TRUE;
+	}
+
+	//
+	// Check if we should force fakevesa
+	//
+	EfiFilePath = PathCleanUpDirectories(ConvertDevicePathToText(UefiSevenImageInfo->FilePath, FALSE, FALSE));
+	Status = GetFilenameInSameDirectory(EfiFilePath, L"UefiSeven.force_fakevesa", (VOID **)&FFVFilePath);
+	FreePool(EfiFilePath);
+	if (!EFI_ERROR(Status) && FileExists(FFVFilePath)) {
+		ForceFakevesa = TRUE;
 	}
 
 	//
@@ -151,9 +163,16 @@ UefiMain (
 	// If an Int10h handler exists there either is a real
 	// VGA ROM in operation or we installed the shim before.
 	//
-	if (IsInt10hHandlerDefined()) {
-		PrintDebug(L"Int10h already has a handler, no further action required\n");
-		goto Exit;
+	if (!ForceFakevesa)
+	{
+		if (IsInt10hHandlerDefined()) {
+			PrintDebug(L"Int10h already has a handler, no further action required\n");
+			goto Exit;
+		}
+	}
+	else
+	{
+		PrintDebug(L"Overwriting int10h handler with fakevesa...\n");
 	}
 
 	//
