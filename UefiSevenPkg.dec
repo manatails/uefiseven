@@ -1,0 +1,13 @@
+# @cecekpawon 2021
+
+[Defines]
+  PACKAGE_NAME      = UefiSevenPkg
+  PACKAGE_GUID      = E1AEE3D0-F3EB-4657-A384-1786282B1335
+  PACKAGE_VERSION   = 1.2
+  DEC_SPECIFICATION = 0x00010005
+
+[Includes]
+  Include
+
+[Protocols]
+  gEfiConsoleControlProtocolGuid = { 0xF42F7782, 0x012E, 0x4C12, { 0x99, 0x56, 0x49, 0xF9, 0x43, 0x04, 0xF7, 0x21 }}

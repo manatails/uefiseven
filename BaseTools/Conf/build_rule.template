@@ -220,7 +220,7 @@
     <Command>
         "$(PP)" $(PP_FLAGS) $(INC) ${src} > ${d_path}(+)${s_base}.i
         Trim --trim-long --source-code -o ${d_path}(+)${s_base}.iii ${d_path}(+)${s_base}.i
-        "$(NASM)" -I${s_path}(+) $(NASM_FLAGS) -o $dst ${d_path}(+)${s_base}.iii
+        "$(NASM)" -I${s_path}(+) $(INC) $(NASM_FLAGS) -o $dst ${d_path}(+)${s_base}.iii
 
 [Assembly-Code-File.COMMON.IPF]
     <InputFile>
