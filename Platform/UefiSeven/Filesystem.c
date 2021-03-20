@@ -276,6 +276,36 @@ Exit:
 	return Status;
 }
 
+EFI_STATUS
+CheckBootMgrGuid (
+	IN UINT8* ImageBase,
+	IN UINTN ImageSize
+	)
+{
+	EFI_STATUS			Status;
+	UINT8 					*Address;
+	CONST EFI_GUID 	BcdWindowsBootmgrGuid = { 0x9dea862c, 0x5cdd, 0x4e70, { 0xac, 0xc1, 0xf3, 0x2b, 0x34, 0x4d, 0x47, 0x95 } };
+
+	//
+	// EfiGuard: Check for the BCD Bootmgr GUID, { 9DEA862C-5CDD-4E70-ACC1-F32B344D4795 },
+	// 					 which is present in bootmgfw/bootmgr (and on Win >= 8 also winload.[exe|efi])
+	//
+
+	Status = EFI_UNSUPPORTED;
+
+	for (Address = ImageBase; Address < ImageBase + ImageSize - sizeof(BcdWindowsBootmgrGuid); Address += sizeof(VOID*))
+	{
+		if (CompareGuid((CONST GUID*)Address, &BcdWindowsBootmgrGuid))
+		{
+			Status = EFI_SUCCESS;
+			break;
+		}
+	}
+
+	PrintDebug(L"CheckBootMgrGuid - %r\n", Status);
+
+	return Status;
+}
 
 EFI_STATUS
 Launch(
@@ -306,7 +336,7 @@ Launch(
 	// Make sure this is a valid EFI loader and fill in the options.
 	//
 	Status = gBS->HandleProtocol(FileImageHandle, &gEfiLoadedImageProtocolGuid, (VOID *)&FileImageInfo);
-	if (EFI_ERROR(Status) || FileImageInfo->ImageCodeType != EfiLoaderCode) {
+	if (EFI_ERROR(Status) || FileImageInfo->ImageCodeType != EfiLoaderCode || EFI_ERROR(CheckBootMgrGuid((UINT8*)FileImageInfo->ImageBase, FileImageInfo->ImageSize))) {
 		PrintError(L"File does not match an EFI loader signature\n");
 		gBS->UnloadImage(FileImageHandle);
 		return EFI_UNSUPPORTED;

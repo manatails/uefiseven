@@ -514,19 +514,31 @@ EnsureMemoryLock(
 	IN	UINT32					Length,
 	IN	MEMORY_LOCK_OPERATION	Operation)
 {
-	EFI_STATUS					Status = EFI_NOT_READY;
-	UINT32						Granularity;
+	EFI_STATUS									Status = EFI_NOT_READY;
+	UINT32											Granularity;
 	EFI_LEGACY_REGION_PROTOCOL	*mLegacyRegion = NULL;
 	EFI_LEGACY_REGION2_PROTOCOL	*mLegacyRegion2 = NULL;
+	CONST CHAR16								*OperationStr;
+
+	switch(Operation) {
+		case UNLOCK:
+			OperationStr = L"unlock";
+			break;
+		case LOCK:
+			OperationStr = L"lock";
+			break;
+		default:
+			return EFI_INVALID_PARAMETER;
+	}
 
 	//
 	// Check if we need to perform any operation.
 	// 
 	if (Operation == UNLOCK && CanWriteAtAddress(StartAddress)) {
-		PrintDebug(L"Memory at %x already unlocked\n", StartAddress);
+		PrintDebug(L"Memory at %x already %sed\n", StartAddress, OperationStr);
 		Status = EFI_SUCCESS;
 	} else if (Operation == LOCK && !CanWriteAtAddress(StartAddress)) {
-		PrintDebug(L"Memory at %x already locked\n", StartAddress);
+		PrintDebug(L"Memory at %x already %sed\n", StartAddress, OperationStr);
 		Status = EFI_SUCCESS;
 	}
 
@@ -544,9 +556,9 @@ EnsureMemoryLock(
 				Status = CanWriteAtAddress(StartAddress) ? EFI_DEVICE_ERROR : EFI_SUCCESS;
 			}
 
-			PrintDebug(L"%s %s memory at %x with EfiLegacyRegionProtocol\n", 
+			PrintDebug(L"%s %sing memory at %x with EfiLegacyRegionProtocol\n", 
 				EFI_ERROR(Status) ? L"Failure" : L"Success",
-				Operation == UNLOCK ? L"unlocking" : L"locking",
+				OperationStr,
 				StartAddress);
 		}
 	}
@@ -565,9 +577,9 @@ EnsureMemoryLock(
 				Status = CanWriteAtAddress(StartAddress) ? EFI_DEVICE_ERROR : EFI_SUCCESS;
 			}
 
-			PrintDebug(L"%s %s memory at %x with EfiLegacyRegion2Protocol\n", 
+			PrintDebug(L"%s %sing memory at %x with EfiLegacyRegion2Protocol\n", 
 				EFI_ERROR(Status) ? L"Failure" : L"Success",
-				Operation == UNLOCK ? L"unlocking" : L"locking",
+				OperationStr,
 				StartAddress);
 		}
 	}
@@ -584,9 +596,9 @@ EnsureMemoryLock(
 			Status = CanWriteAtAddress(StartAddress) ? EFI_DEVICE_ERROR : EFI_SUCCESS;
 		}
 
-		PrintDebug(L"%s %s memory at %x with MTRRs\n", 
+		PrintDebug(L"%s %sing memory at %x with MTRRs\n", 
 			EFI_ERROR(Status) ? L"Failure" : L"Success",
-			Operation == UNLOCK ? L"unlocking" : L"locking",
+			OperationStr,
 			StartAddress);
 	}
 	
@@ -594,8 +606,7 @@ EnsureMemoryLock(
 	// None of the methods worked?
 	// 
 	if (EFI_ERROR(Status)) {
-		PrintError(L"Unable to find a way to %s memory at %x. Proceeding without %sing...\n", 
-			Operation == UNLOCK ? L"unlock" : L"lock", StartAddress, Operation == UNLOCK ? L"unlock" : L"lock");
+		PrintDebug(L"Unable to find a way to %s memory at %x\n", OperationStr, StartAddress);
 	}
 	
 	return Status;
