@@ -59,6 +59,10 @@ GetFilenameInSameDirectory(
 	IN	CHAR16	*NewFileName,
 	OUT	VOID	**NewFilePath);
 
+CHAR16 *
+GetBaseFilename(
+  IN  CHAR16  *CurrentFilePath);
+
 EFI_STATUS
 FileRead(
 	IN	CHAR16	*FilePath,

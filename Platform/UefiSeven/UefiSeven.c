@@ -91,39 +91,48 @@ UefiMain (
 		goto Exit;
 	}
 
+	EfiFilePath = PathCleanUpDirectories(ConvertDevicePathToText(UefiSevenImageInfo->FilePath, FALSE, FALSE));
+	if (EfiFilePath == NULL) {
+		PrintError(L"Unable to locate self-path, aborting\n");
+		goto Exit;
+	}
+
 	//
 	// Check if we should skip warnings and prompts
 	//
-	EfiFilePath = PathCleanUpDirectories(ConvertDevicePathToText(UefiSevenImageInfo->FilePath, FALSE, FALSE));
+
 	Status = GetFilenameInSameDirectory(EfiFilePath, L"UefiSeven.skiperrors", (VOID **)&SkipFilePath);
-	FreePool(EfiFilePath);
-	if (!EFI_ERROR(Status) && FileExists(SkipFilePath)) {
-		SkipErrors = TRUE;
+	if (!EFI_ERROR(Status)) {
+		SkipErrors = FileExists(SkipFilePath);
+		FreePool(SkipFilePath);
 	}
 
 	//
 	// Check if we should force fakevesa
 	//
-	EfiFilePath = PathCleanUpDirectories(ConvertDevicePathToText(UefiSevenImageInfo->FilePath, FALSE, FALSE));
 	Status = GetFilenameInSameDirectory(EfiFilePath, L"UefiSeven.force_fakevesa", (VOID **)&FFVFilePath);
-	FreePool(EfiFilePath);
-	if (!EFI_ERROR(Status) && FileExists(FFVFilePath)) {
-		ForceFakevesa = TRUE;
+	if (!EFI_ERROR(Status)) {
+		ForceFakevesa = FileExists(FFVFilePath);
+		FreePool(FFVFilePath);
 	}
 
 	//
-	// Check if we should run in verbose mode (directory contains .verbose file or 'v' is pressed).
+	// Check if we should run in verbose mode
 	//
-	Status = gST->ConIn->ReadKeyStroke(gST->ConIn, &Key);
-	if (!EFI_ERROR(Status) && Key.UnicodeChar == L'v') {
-		VerboseMode = TRUE;
-	}
-
-	EfiFilePath = PathCleanUpDirectories(ConvertDevicePathToText(UefiSevenImageInfo->FilePath, FALSE, FALSE));
 	Status = GetFilenameInSameDirectory(EfiFilePath, L"UefiSeven.verbose", (VOID **)&VerboseFilePath);
-	FreePool(EfiFilePath);
-	if (!EFI_ERROR(Status) && FileExists(VerboseFilePath)) {
-		VerboseMode = TRUE;
+	if (!EFI_ERROR(Status)) {
+		VerboseMode = FileExists(VerboseFilePath);
+		FreePool(VerboseFilePath);
+	}
+
+	//
+	// Check if we should run in verbose mode ('v' is pressed).
+	//
+	if (!VerboseMode) {
+		Status = gST->ConIn->ReadKeyStroke(gST->ConIn, &Key);
+		if (!EFI_ERROR(Status) && Key.UnicodeChar == L'v') {
+			VerboseMode = TRUE;
+		}
 	}
 
 	PrintDebug(L"UefiSeven %s\n", VERSION);
@@ -259,9 +268,12 @@ Exit:
 	//
 	// Check if we can chainload the Windows Boot Manager.
 	//
-	EfiFilePath = PathCleanUpDirectories(ConvertDevicePathToText(UefiSevenImageInfo->FilePath, FALSE, FALSE));
-	Status = ChangeExtension(EfiFilePath, L"original.efi", (VOID **)&LaunchPath);
-	FreePool(EfiFilePath);
+	if (EfiFilePath != NULL) {
+		Status = ChangeExtension(EfiFilePath, L"original.efi", (VOID **)&LaunchPath);
+		FreePool(EfiFilePath);
+	} else {
+		Status = EFI_NOT_FOUND;
+	}
 	if (!EFI_ERROR(Status) && FileExists(LaunchPath)) {
 		PrintDebug(L"Found Windows Boot Manager at '%s'\n", LaunchPath);
 	} else {
@@ -289,6 +301,7 @@ Exit:
 	
 	if (LaunchPath != NULL) {
 		Launch(LaunchPath, VerboseMode ? &WaitForEnterAndStall : NULL);
+		FreePool(LaunchPath);
 	}
 
 	return EFI_SUCCESS;

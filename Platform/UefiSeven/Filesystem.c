@@ -79,6 +79,26 @@ ChangeExtension(
 	return EFI_SUCCESS;
 }
 
+UINTN
+GetEndingSlashIndex (
+	IN	CHAR16	*CurrentFilePath,
+	IN	BOOLEAN	NoSlashPrefixed)
+{
+	UINTN	EndingSlashIndex;
+
+	EndingSlashIndex = StrLen(CurrentFilePath) - 1;
+	while ((CurrentFilePath[EndingSlashIndex] != L'\\') && (EndingSlashIndex != 0)) {
+		EndingSlashIndex--;
+	}
+	if (NoSlash) {
+		while ((CurrentFilePath[EndingSlashIndex] == L'\\') && (EndingSlashIndex != 0)) {
+			EndingSlashIndex--;
+		}
+	}
+
+	return EndingSlashIndex;
+}
+
 EFI_STATUS
 GetFilenameInSameDirectory(
 	IN	CHAR16	*CurrentFilePath,
@@ -89,10 +109,8 @@ GetFilenameInSameDirectory(
 	UINTN	NewFileNameLen = StrLen(NewFileName);
 
 	*NewFilePath = 0;
-	EndingSlashIndex = StrLen(CurrentFilePath) - 1;
-	while ((CurrentFilePath[EndingSlashIndex] != L'\\') && (EndingSlashIndex != 0)) {
-		EndingSlashIndex--;
-	}
+
+	EndingSlashIndex = GetEndingSlashIndex (CurrentFilePath, FALSE);
 
 	if (EndingSlashIndex == 0 && (CurrentFilePath[EndingSlashIndex] != L'\\'))
 		return EFI_INVALID_PARAMETER;
@@ -107,6 +125,20 @@ GetFilenameInSameDirectory(
 	CopyMem(((CHAR16 *)*NewFilePath) + EndingSlashIndex, NewFileName, NewFileNameLen * sizeof(CHAR16));
 	
 	return EFI_SUCCESS;
+}
+
+CHAR16 *
+GetBaseFilename(
+	IN	CHAR16	*CurrentFilePath)
+{
+	INTN	EndingSlashIndex;
+
+	EndingSlashIndex = GetEndingSlashIndex (CurrentFilePath, TRUE);
+
+	if (EndingSlashIndex < 0)
+		return NULL;
+
+	return &CurrentFilePath[EndingSlashIndex];
 }
 
 
