@@ -90,7 +90,7 @@ GetEndingSlashIndex (
 	while ((CurrentFilePath[EndingSlashIndex] != L'\\') && (EndingSlashIndex != 0)) {
 		EndingSlashIndex--;
 	}
-	if (NoSlash) {
+	if (NoSlashPrefixed) {
 		while ((CurrentFilePath[EndingSlashIndex] == L'\\') && (EndingSlashIndex != 0)) {
 			EndingSlashIndex--;
 		}
