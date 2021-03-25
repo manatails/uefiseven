@@ -24,7 +24,13 @@
 **/
 
 #include <Uefi.h>
+
 #include <Guid/FileInfo.h>
+
+#include <Protocol/DevicePath.h>
+#include <Protocol/LoadedImage.h>
+#include <Protocol/SimpleFileSystem.h>
+
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/DevicePathLib.h>
@@ -32,9 +38,6 @@
 #include <Library/PrintLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
-#include <Protocol/DevicePath.h>
-#include <Protocol/LoadedImage.h>
-#include <Protocol/SimpleFileSystem.h>
 
 
 /**
@@ -44,35 +47,41 @@
 **/
 
 BOOLEAN
-FileExists(
-	IN	CHAR16	*FilePath);
+FileExists (
+  IN  CHAR16  *FilePath
+  );
 
 EFI_STATUS
-ChangeExtension(
-	IN	CHAR16	*FilePath,
-	IN	CHAR16	*NewExtension,
-	OUT	VOID	**NewFilePath);
+ChangeExtension (
+  IN  CHAR16  *FilePath,
+  IN  CHAR16  *NewExtension,
+  OUT VOID    **NewFilePath
+  );
 
 EFI_STATUS
-GetFilenameInSameDirectory(
-	IN	CHAR16	*CurrentFilePath,
-	IN	CHAR16	*NewFileName,
-	OUT	VOID	**NewFilePath);
+GetFilenameInSameDirectory (
+  IN  CHAR16  *CurrentFilePath,
+  IN  CHAR16  *NewFileName,
+  OUT VOID    **NewFilePath
+  );
 
 CHAR16 *
-GetBaseFilename(
-  IN  CHAR16  *CurrentFilePath);
+GetBaseFilename (
+  IN  CHAR16  *CurrentFilePath
+  );
 
 EFI_STATUS
-FileRead(
-	IN	CHAR16	*FilePath,
-	OUT	VOID	**FileContents,
-	OUT	UINTN	*FileBytes);
+FileRead (
+  IN  CHAR16  *FilePath,
+  OUT VOID    **FileContents,
+  OUT UINTN   *FileBytes
+  );
 
 EFI_STATUS
-Launch(
-	IN	CHAR16	*FilePath,
-	IN	VOID	(*WaitForEnterCallback)(BOOLEAN));
+Launch (
+  IN  CHAR16  *FilePath,
+  IN  VOID    (*WaitForEnterCallback) (BOOLEAN)
+  );
 
 
 /**
@@ -81,8 +90,8 @@ Launch(
   -----------------------------------------------------------------------------
 **/
 
-extern	EFI_HANDLE					UefiSevenImage;
-extern	EFI_LOADED_IMAGE_PROTOCOL	*UefiSevenImageInfo;
+extern  EFI_HANDLE                  UefiSevenImage;
+extern  EFI_LOADED_IMAGE_PROTOCOL   *UefiSevenImageInfo;
 
 
 #endif

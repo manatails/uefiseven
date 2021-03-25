@@ -16,9 +16,9 @@
 
 
 #string STR_MODULE_ABSTRACT
-	#language en-US
-	"Provides a dummy VGA ROM for Windows 7"
+  #language en-US
+  "Provides a dummy VGA ROM for Windows 7"
 
 #string STR_MODULE_DESCRIPTION
-	#language en-US
-	"This simple application loads a VGA ROM stub into a memory location where Windows 7 expects to find one and will not load unless it is present. This expectation prevents it from booting eg. on Early-2015 MacBook Air."
+  #language en-US
+  "This simple application loads a VGA ROM stub into a memory location where Windows 7 expects to find one and will not load unless it is present. This expectation prevents it from booting eg. on Early-2015 MacBook Air."

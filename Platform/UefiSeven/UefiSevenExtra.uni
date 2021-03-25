@@ -14,8 +14,6 @@
 //
 //
 
-#string STR_PROPERTIES_MODULE_NAME 
-	#language en-US 
-	"VGA Compatibility Shim"
-
-
+#string STR_PROPERTIES_MODULE_NAME
+  #language en-US
+  "VGA Compatibility Shim"

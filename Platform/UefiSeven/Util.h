@@ -23,7 +23,7 @@
   -----------------------------------------------------------------------------
 **/
 
-#define	DEBUG_MESSAGE_LENGTH	0x100
+#define DEBUG_MESSAGE_LENGTH  0x100
 
 
 
@@ -44,21 +44,22 @@
 
 VOID
 StrToLowercase(
-	IN			CHAR16	*String);
+  IN      CHAR16  *String);
 
 VOID
 EFIAPI
 PrintFuncNameMessage(
-	IN CONST	BOOLEAN	IsError,
-	IN CONST	CHAR8	*FuncName,
-	IN CONST	CHAR16	*FormatString,
-	...);
+  IN CONST  BOOLEAN   IsError,
+  IN CONST  CHAR8     *FuncName,
+  IN CONST  CHAR16    *FormatString,
+  ...
+  );
 
-#define	PrintDebug(Format, ...) \
-		PrintFuncNameMessage(FALSE, __FUNCTION__, Format, ##__VA_ARGS__)
+#define PrintDebug(Format, ...) \
+    PrintFuncNameMessage(FALSE, __FUNCTION__, Format, ##__VA_ARGS__)
 
-#define	PrintError(Format, ...) \
-		PrintFuncNameMessage(TRUE, __FUNCTION__, Format, ##__VA_ARGS__)
+#define PrintError(Format, ...) \
+    PrintFuncNameMessage(TRUE, __FUNCTION__, Format, ##__VA_ARGS__)
 
 
 #endif
