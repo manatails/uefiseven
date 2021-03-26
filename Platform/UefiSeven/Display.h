@@ -13,8 +13,8 @@
 
 **/
 
-#ifndef __DISPLAY_H__
-#define __DISPLAY_H__
+#ifndef __DISPLAY_H
+#define __DISPLAY_H
 
 
 /**
@@ -187,7 +187,7 @@ EnsureDisplayAvailable (
   -----------------------------------------------------------------------------
 **/
 
-extern DISPLAY_INFO  DisplayInfo;
+extern DISPLAY_INFO  mDisplayInfo;
 
 
 #endif

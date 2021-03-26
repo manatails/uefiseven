@@ -17,6 +17,3 @@
 #string STR_PACKAGE_ABSTRACT            #language en-US "Intel Framework Package Reference Implementations"
 
 #string STR_PACKAGE_DESCRIPTION         #language en-US "This package provides definitions and libraries that comply to Intel Framework specifications."
-
-
-

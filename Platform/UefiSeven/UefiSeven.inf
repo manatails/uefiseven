@@ -53,6 +53,7 @@
 
 [Guids]
   gEfiFileInfoGuid
+  gBcdWindowsBootmgrGuid
 
 [Protocols]
   gEfiLegacyRegionProtocolGuid          ## CONSUMES

@@ -23,6 +23,7 @@
   -----------------------------------------------------------------------------
 **/
 
+
 /**
   Creates a new string representing path to a file identical
   to the one specified as input but with a different extension.
@@ -56,7 +57,12 @@ ChangeExtension (
   UINTN   DotIndex;
   UINTN   NewExtensionLen;
 
-  *NewFilePath = 0;
+  if ((FilePath == NULL) || (NewExtension == NULL) || (NewFilePath == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  *NewFilePath = NULL;
+
   DotIndex = StrLen (FilePath) - 1;
   while ((FilePath[DotIndex] != L'.') && (DotIndex != 0)) {
     DotIndex--;
@@ -84,13 +90,18 @@ ChangeExtension (
   return EFI_SUCCESS;
 }
 
+
 UINTN
 GetEndingSlashIndex (
   IN  CHAR16    *CurrentFilePath,
   IN  BOOLEAN   NoSlashPrefixed
   )
 {
-  UINTN EndingSlashIndex;
+  UINTN   EndingSlashIndex;
+
+  if (CurrentFilePath == NULL) {
+    return 0;
+  }
 
   EndingSlashIndex = StrLen (CurrentFilePath) - 1;
   while ((CurrentFilePath[EndingSlashIndex] != L'\\') && (EndingSlashIndex != 0)) {
@@ -105,6 +116,7 @@ GetEndingSlashIndex (
   return EndingSlashIndex;
 }
 
+
 EFI_STATUS
 GetFilenameInSameDirectory (
   IN  CHAR16  *CurrentFilePath,
@@ -115,11 +127,15 @@ GetFilenameInSameDirectory (
   UINTN   EndingSlashIndex;
   UINTN   NewFileNameLen;
 
-  *NewFilePath = 0;
+  if ((CurrentFilePath == NULL) || (NewFileName == NULL) || (NewFilePath == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  *NewFilePath = NULL;
 
   EndingSlashIndex = GetEndingSlashIndex (CurrentFilePath, FALSE);
 
-  if (EndingSlashIndex == 0 && (CurrentFilePath[EndingSlashIndex] != L'\\')) {
+  if ((EndingSlashIndex == 0) && (CurrentFilePath[EndingSlashIndex] != L'\\')) {
     return EFI_INVALID_PARAMETER;
   }
 
@@ -138,11 +154,17 @@ GetFilenameInSameDirectory (
   return EFI_SUCCESS;
 }
 
+
 CHAR16 *
 GetBaseFilename (
-  IN  CHAR16  *CurrentFilePath)
+  IN  CHAR16  *CurrentFilePath
+  )
 {
   INTN  EndingSlashIndex;
+
+  if (CurrentFilePath == NULL) {
+    return NULL;
+  }
 
   EndingSlashIndex = GetEndingSlashIndex (CurrentFilePath, TRUE);
 
@@ -179,8 +201,12 @@ FileExists (
   EFI_FILE_HANDLE         VolumeRoot;
   EFI_FILE_HANDLE         RequestedFile;
 
+  if ((FilePath == NULL) || (mUefiSevenImageInfo == NULL)) {
+    return FALSE;
+  }
+
   // Open volume where UefiSeven resides.
-  Status = gBS->HandleProtocol (UefiSevenImageInfo->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Volume);
+  Status = gBS->HandleProtocol (mUefiSevenImageInfo->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Volume);
   if (EFI_ERROR (Status)) {
     PrintDebug (L"Unable to find simple file system protocol (error: %r)\n", Status);
     return FALSE;
@@ -249,8 +275,12 @@ FileRead (
   EFI_FILE_INFO           *FileInfo;
   UINTN                   Size;
 
+  if ((FilePath == NULL) || (FileContents == NULL) || (FileBytes == NULL) || (mUefiSevenImageInfo == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
   // Open volume where UefiSeven resides.
-  Status = gBS->HandleProtocol (UefiSevenImageInfo->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (void **)&Volume);
+  Status = gBS->HandleProtocol (mUefiSevenImageInfo->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Volume);
   if (EFI_ERROR (Status)) {
     PrintDebug (L"Unable to find simple file system protocol (error: %r)\n", Status);
     goto Exit;
@@ -309,9 +339,10 @@ FileRead (
     *FileBytes = Size;
   }
 
-Exit:
+  Exit:
+
   // Cleanup.
-  if (EFI_ERROR (Status) && *FileContents != NULL) {
+  if (EFI_ERROR (Status) && (*FileContents != NULL)) {
     FreePool (*FileContents);
     *FileContents = NULL;
   }
@@ -325,15 +356,15 @@ Exit:
   return Status;
 }
 
+
 EFI_STATUS
 CheckBootMgrGuid (
   IN UINT8  *ImageBase,
   IN UINTN  ImageSize
   )
 {
-  EFI_STATUS      Status;
-  UINT8           *Address;
-  CONST EFI_GUID  BcdWindowsBootmgrGuid = { 0x9dea862c, 0x5cdd, 0x4e70, { 0xac, 0xc1, 0xf3, 0x2b, 0x34, 0x4d, 0x47, 0x95 } };
+  EFI_STATUS  Status;
+  UINT8       *Address;
 
   //
   // EfiGuard: Check for the BCD Bootmgr GUID, { 9DEA862C-5CDD-4E70-ACC1-F32B344D4795 },
@@ -342,12 +373,16 @@ CheckBootMgrGuid (
 
   Status = EFI_UNSUPPORTED;
 
+  if ((ImageBase == NULL) || (ImageSize == 0)) {
+    return Status;
+  }
+
   for (Address = ImageBase;
-    Address < ImageBase + ImageSize - sizeof (BcdWindowsBootmgrGuid);
+    Address < ImageBase + ImageSize - sizeof (EFI_GUID);
     Address += sizeof (VOID *)
     )
   {
-    if (CompareGuid ((CONST GUID *)Address, &BcdWindowsBootmgrGuid)) {
+    if (CompareGuid ((CONST EFI_GUID *)Address, &gBcdWindowsBootmgrGuid)) {
       Status = EFI_SUCCESS;
       break;
     }
@@ -357,6 +392,7 @@ CheckBootMgrGuid (
 
   return Status;
 }
+
 
 EFI_STATUS
 Launch (
@@ -370,26 +406,32 @@ Launch (
   EFI_LOADED_IMAGE_PROTOCOL   *FileImageInfo;
   CHAR16                      *FilePathOnDeviceText;
 
+  if ((FilePath == NULL) || (mUefiSevenImageInfo == NULL) || (mUefiSevenImage == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
   //
   // Try to load the image first.
   //
-  FilePathOnDevice      = FileDevicePath (UefiSevenImageInfo->DeviceHandle, FilePath);
+  FilePathOnDevice      = FileDevicePath (mUefiSevenImageInfo->DeviceHandle, FilePath);
   FilePathOnDeviceText  = ConvertDevicePathToText (FilePathOnDevice, TRUE, FALSE);
-  Status = gBS->LoadImage (TRUE, UefiSevenImage, FilePathOnDevice, NULL, 0, &FileImageHandle);
+  Status = gBS->LoadImage (TRUE, mUefiSevenImage, FilePathOnDevice, NULL, 0, &FileImageHandle);
   if (EFI_ERROR (Status)) {
     PrintError (L"Unable to load '%s' (error: %r)\n", FilePathOnDeviceText, Status);
   } else {
     PrintDebug (L"Loaded '%s'\n", FilePathOnDeviceText);
     PrintDebug (L"Addresss behind FileImageHandle=%x\n", FileImageHandle);
   }
-  FreePool (FilePathOnDeviceText);
+  if (FilePathOnDeviceText != NULL) {
+    FreePool (FilePathOnDeviceText);
+  }
 
   //
   // Make sure this is a valid EFI loader and fill in the options.
   //
   Status = gBS->HandleProtocol (FileImageHandle, &gEfiLoadedImageProtocolGuid, (VOID *)&FileImageInfo);
   if (EFI_ERROR (Status)
-    || FileImageInfo->ImageCodeType != EfiLoaderCode
+    || (FileImageInfo->ImageCodeType != EfiLoaderCode)
     || EFI_ERROR (CheckBootMgrGuid ((UINT8 *)FileImageInfo->ImageBase, FileImageInfo->ImageSize))
     )
   {

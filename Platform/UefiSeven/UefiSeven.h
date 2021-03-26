@@ -12,8 +12,8 @@
 
 **/
 
-#ifndef __VGA_SHIM_H__
-#define __VGA_SHIM_H__
+#ifndef __VGA_SHIM_H
+#define __VGA_SHIM_H
 
 
 /**
@@ -86,7 +86,9 @@ EnsureMemoryLock (
   );
 
 BOOLEAN
-IsInt10hHandlerDefined ();
+IsInt10hHandlerDefined (
+  VOID
+  );
 
 EFI_STATUS
 ShimVesaInformation (
@@ -113,7 +115,7 @@ WaitForEnterAndStall (
 STATIC CONST  CHAR8                 VENDOR_NAME[]       = "UefiSeven";
 STATIC CONST  CHAR8                 PRODUCT_NAME[]      = "Emulated VGA";
 STATIC CONST  CHAR8                 PRODUCT_REVISION[]  = "OVMF Int10h (fake)";
-STATIC CONST  EFI_PHYSICAL_ADDRESS  VGA_ROM_ADDRESS     = 0xc0000;
+STATIC CONST  EFI_PHYSICAL_ADDRESS  VGA_ROM_ADDRESS     = 0xC0000;
 STATIC CONST  EFI_PHYSICAL_ADDRESS  IVT_ADDRESS         = 0x00000;
 STATIC CONST  UINTN                 VGA_ROM_SIZE        = 0x10000;
 STATIC CONST  UINTN                 FIXED_MTRR_SIZE     = 0x20000;

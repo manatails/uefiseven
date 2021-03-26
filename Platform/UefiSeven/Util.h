@@ -13,8 +13,8 @@
 
 **/
 
-#ifndef __UTIL_H__
-#define __UTIL_H__
+#ifndef __UTIL_H
+#define __UTIL_H
 
 
 /**
@@ -43,12 +43,13 @@
 **/
 
 VOID
-StrToLowercase(
-  IN      CHAR16  *String);
+StrToLowercase (
+  IN  CHAR16  *String
+  );
 
 VOID
 EFIAPI
-PrintFuncNameMessage(
+PrintFuncNameMessage (
   IN CONST  BOOLEAN   IsError,
   IN CONST  CHAR8     *FuncName,
   IN CONST  CHAR16    *FormatString,
@@ -56,10 +57,10 @@ PrintFuncNameMessage(
   );
 
 #define PrintDebug(Format, ...) \
-    PrintFuncNameMessage(FALSE, __FUNCTION__, Format, ##__VA_ARGS__)
+  PrintFuncNameMessage (FALSE, __FUNCTION__, Format, ##__VA_ARGS__)
 
 #define PrintError(Format, ...) \
-    PrintFuncNameMessage(TRUE, __FUNCTION__, Format, ##__VA_ARGS__)
+  PrintFuncNameMessage (TRUE, __FUNCTION__, Format, ##__VA_ARGS__)
 
 
 #endif

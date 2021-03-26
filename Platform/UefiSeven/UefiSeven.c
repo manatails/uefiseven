@@ -27,286 +27,13 @@
   -----------------------------------------------------------------------------
 **/
 
-DISPLAY_INFO                DisplayInfo;
-EFI_HANDLE                  UefiSevenImage;
-EFI_LOADED_IMAGE_PROTOCOL   *UefiSevenImageInfo;
-BOOLEAN                     VerboseMode = FALSE;
-BOOLEAN                     SkipErrors = FALSE;
-BOOLEAN                     ForceFakevesa = FALSE;
 
-
-/**
-  The entry point for the application.
-
-  @param[in] ImageHandle    The firmware allocated handle for the EFI image.
-  @param[in] SystemTable    A pointer to the EFI System Table.
-
-  @retval EFI_SUCCESS       VGA ROM shim has been installed successfully
-                            or it was found not to be required.
-  @retval other             Some error occured during execution.
-
-**/
-EFI_STATUS
-EFIAPI
-UefiMain (
-  IN EFI_HANDLE         ImageHandle,
-  IN EFI_SYSTEM_TABLE   *SystemTable
-  )
-{
-  EFI_PHYSICAL_ADDRESS    Int10hHandlerAddress;
-  IVT_ENTRY               *IvtInt10hHandlerEntry;
-  IVT_ENTRY               NewInt10hHandlerEntry;
-  EFI_PHYSICAL_ADDRESS    IvtAddress;
-  EFI_STATUS              Status;
-  EFI_STATUS              IvtAllocationStatus;
-  EFI_STATUS              IvtFreeStatus;
-  EFI_INPUT_KEY           Key;
-  CHAR16                  *LaunchPath = NULL;
-  CHAR16                  *EfiFilePath = NULL;
-  CHAR16                  *VerboseFilePath = NULL;
-  CHAR16                  *SkipFilePath = NULL;
-  CHAR16                  *FFVFilePath = NULL;
-
-  //
-  // Try freeing IVT memory area in case it has already been allocated.
-  //
-  IvtFreeStatus = gBS->FreePages (IVT_ADDRESS, 1);
-
-  //
-  // Claim real mode IVT memory area before any allocation can
-  // grab it. This can be done as the IDT has already been
-  // initialized so we can overwrite the IVT.
-  //
-  IvtAddress = IVT_ADDRESS;
-  IvtAllocationStatus = gBS->AllocatePages (AllocateAddress, EfiBootServicesCode, 1, &IvtAddress);
-
-  PrintDebug (L"Force free IVT area result: %r\n", IvtFreeStatus);
-
-  //
-  // Initialization.
-  //
-  UefiSevenImage = ImageHandle;
-  Status = gBS->HandleProtocol (UefiSevenImage, &gEfiLoadedImageProtocolGuid, (VOID **)&UefiSevenImageInfo);
-  if (EFI_ERROR (Status)) {
-    PrintError (L"Unable to locate EFI_LOADED_IMAGE_PROTOCOL, aborting\n");
-    goto Exit;
-  }
-
-  EfiFilePath = PathCleanUpDirectories (ConvertDevicePathToText (UefiSevenImageInfo->FilePath, FALSE, FALSE));
-  if (EfiFilePath == NULL) {
-    PrintError (L"Unable to locate self-path, aborting\n");
-    goto Exit;
-  }
-
-  //
-  // Check if we should skip warnings and prompts
-  //
-
-  Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.skiperrors", (VOID **)&SkipFilePath);
-  if (!EFI_ERROR (Status)) {
-    SkipErrors = FileExists (SkipFilePath);
-    FreePool (SkipFilePath);
-  }
-
-  //
-  // Check if we should force fakevesa
-  //
-  Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.force_fakevesa", (VOID **)&FFVFilePath);
-  if (!EFI_ERROR (Status)) {
-    ForceFakevesa = FileExists (FFVFilePath);
-    FreePool (FFVFilePath);
-  }
-
-  //
-  // Check if we should run in verbose mode
-  //
-  Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.verbose", (VOID **)&VerboseFilePath);
-  if (!EFI_ERROR (Status)) {
-    VerboseMode = FileExists (VerboseFilePath);
-    FreePool (VerboseFilePath);
-  }
-
-  //
-  // Check if we should run in verbose mode ('v' is pressed).
-  //
-  if (!VerboseMode) {
-    Status = gST->ConIn->ReadKeyStroke (gST->ConIn, &Key);
-    if (!EFI_ERROR (Status) && Key.UnicodeChar == L'v') {
-      VerboseMode = TRUE;
-    }
-  }
-
-  PrintDebug (L"UefiSeven %s\n", VERSION);
-
-  if (VerboseMode) {
-    PrintDebug (L"You are running in verbose mode, press Enter to continue\n");
-    WaitForEnter (FALSE);
-  }
-
-  //
-  // Show animated logo.
-  //
-  //if (!VerboseMode) {
-  //  ShowAnimatedLogo ();
-  //}
-
-  //
-  // Windows 7 prefers a 1024x768 resolution.
-  //
-  SwitchVideoMode (1024, 768);
-  if (VerboseMode) {
-    PrintVideoInfo ();
-  }
-
-  if (!MatchCurrentResolution (1024, 768)) {
-    PrintError (L"Current display does not seem to support changing to 1024x768 resolution\n");
-    PrintError (L"which is the minimum requirement of Windows 7.\n");
-    PrintError (L"It is likely that Windows might fail to boot even with the handler installed.\n");
-    PrintError (L"Press Enter to try a new 'hack' that will force the display driver to work.\n");
-    PrintError (L"The display might be glitchy but it will be able to provide a workable screen.\n");
-    if (!SkipErrors) {
-      WaitForEnter (FALSE);
-    }
-    ForceVideoModeHack (1024, 768);
-  }
-
-  //
-  // If an Int10h handler exists there either is a real
-  // VGA ROM in operation or we installed the shim before.
-  //
-  if (!ForceFakevesa) {
-    if (IsInt10hHandlerDefined ()) {
-      PrintDebug (L"Int10h already has a handler, no further action required\n");
-      goto Exit;
-    }
-  } else {
-    PrintDebug (L"Overwriting int10h handler with fakevesa...\n");
-  }
-
-  //
-  // Sanity checks.
-  //
-  if (sizeof INT10H_HANDLER > VGA_ROM_SIZE) {
-    PrintError (L"Shim size bigger than allowed (%u > %u), aborting\n",
-      sizeof INT10H_HANDLER, VGA_ROM_SIZE);
-    goto Exit;
-  }
-
-  //
-  // Unlock VGA ROM memory area for writing first.
-  //
-  Status = EnsureMemoryLock (VGA_ROM_ADDRESS, (UINT32)VGA_ROM_SIZE, UNLOCK);
-  if (EFI_ERROR (Status)) {
-    PrintError (L"Unable to unlock VGA ROM memory at %04x, aborting\n", VGA_ROM_ADDRESS);
-    goto Exit;
-  }
-
-  //
-  // Copy ROM stub in place and fill in the missing information.
-  //
-  SetMem ((VOID *)VGA_ROM_ADDRESS, VGA_ROM_SIZE, 0);
-  CopyMem ((VOID *)VGA_ROM_ADDRESS, INT10H_HANDLER, sizeof INT10H_HANDLER);
-  Status = ShimVesaInformation (VGA_ROM_ADDRESS, &Int10hHandlerAddress);
-  if (EFI_ERROR (Status)) {
-    PrintError (L"VESA information could not be filled in, aborting\n");
-    goto Exit;
-  } else {
-    // Convert from 32bit physical address to real mode segment address.
-    NewInt10hHandlerEntry.Segment = (UINT16)((UINT32)VGA_ROM_ADDRESS >> 4);
-    NewInt10hHandlerEntry.Offset = (UINT16)(Int10hHandlerAddress - VGA_ROM_ADDRESS);
-    PrintDebug (L"VESA information filled in, Int10h handler address=%x (%04x:%04x)\n",
-      Int10hHandlerAddress, NewInt10hHandlerEntry.Segment, NewInt10hHandlerEntry.Offset);
-  }
-
-  //
-  // Lock VGA ROM memory area to prevent further writes.
-  //
-  Status = EnsureMemoryLock (VGA_ROM_ADDRESS, (UINT32)VGA_ROM_SIZE, LOCK);
-  if (EFI_ERROR (Status)) {
-    PrintDebug (L"Unable to lock VGA ROM memory at %x but this is not essential\n",
-      VGA_ROM_ADDRESS);
-  }
-
-  //
-  // Try to point the Int10h vector at shim entry point.
-  //
-  IvtInt10hHandlerEntry = (IVT_ENTRY *)IVT_ADDRESS + 0x10;
-  if (!EFI_ERROR (IvtAllocationStatus)) {
-    IvtInt10hHandlerEntry->Segment = NewInt10hHandlerEntry.Segment;
-    IvtInt10hHandlerEntry->Offset = NewInt10hHandlerEntry.Offset;
-    PrintDebug (L"Int10h IVT entry modified to point at %04x:%04x\n",
-      IvtInt10hHandlerEntry->Segment, IvtInt10hHandlerEntry->Offset);
-  } else if (IvtInt10hHandlerEntry->Segment == NewInt10hHandlerEntry.Segment
-    && IvtInt10hHandlerEntry->Offset == NewInt10hHandlerEntry.Offset) {
-    PrintDebug (L"Int10h IVT entry could not be modified but already pointing at %04x:%04x\n",
-      IvtInt10hHandlerEntry->Segment, IvtInt10hHandlerEntry->Offset);
-  } else {
-    PrintError (L"Unable to claim IVT area at %04x (error: %r)\n", IVT_ADDRESS, IvtAllocationStatus);
-    PrintError (L"Int10h IVT entry could not be modified and currently poiting\n");
-    PrintError (L"at a wrong memory area (%04x:%04x instead of %04x:%04x).\n",
-      IvtInt10hHandlerEntry->Segment, IvtInt10hHandlerEntry->Offset,
-      NewInt10hHandlerEntry.Segment, NewInt10hHandlerEntry.Offset);
-    PrintError (L"Press Enter to try to continue.\n");
-    if (!SkipErrors) {
-      WaitForEnter (FALSE);
-    }
-  }
-
-  //
-  // Double check if the handler has been installed properly
-  //
-  if (IsInt10hHandlerDefined ()) {
-    PrintDebug (L"Pre-boot Int10h sanity check success\n");
-  } else {
-    PrintError (L"Pre-boot Int10h sanity check failed\n");
-    PrintError (L"Press Enter to continue.\n");
-    if (!SkipErrors) {
-      WaitForEnter (FALSE);
-    }
-  }
-
-Exit:
-  //
-  // Check if we can chainload the Windows Boot Manager.
-  //
-  if (EfiFilePath != NULL) {
-    Status = ChangeExtension (EfiFilePath, L"original.efi", (VOID **)&LaunchPath);
-    FreePool (EfiFilePath);
-  } else {
-    Status = EFI_NOT_FOUND;
-  }
-  if (!EFI_ERROR (Status) && FileExists (LaunchPath)) {
-    PrintDebug (L"Found Windows Boot Manager at '%s'\n", LaunchPath);
-  } else {
-    PrintError (L"Could not find Windows Boot Manager at '%s'\n", LaunchPath);
-    //PrintError (L"Rename the original bootx64.efi from efi\\boot\\ to bootx64.original.efi\n");
-    PrintError (L"Press Enter to continue.\n");
-    WaitForEnter (FALSE);
-  }
-
-  //
-  // Make it possible to enter Windows Boot Manager.
-  //
-  if (!VerboseMode) {
-    Status = gST->ConIn->ReadKeyStroke (gST->ConIn, &Key);
-    if (!EFI_ERROR (Status) && Key.ScanCode == SCAN_F8) {
-      PrintError (L"F8 keypress detected, switching to text mode\n");
-      PrintError (L"Press Enter to continue and then immediately press F8 again\n");
-      WaitForEnterAndStall (FALSE);
-    }
-  } else {
-    // For debug mode we should also detect F8 and then wait a little
-    // to allow user to fill key buffer with F8 in time but this
-    // waiting will be done by the Lauch method.
-  }
-
-  if (LaunchPath != NULL) {
-    Launch (LaunchPath, VerboseMode ? &WaitForEnterAndStall : NULL);
-    FreePool (LaunchPath);
-  }
-
-  return EFI_SUCCESS;
-}
+DISPLAY_INFO                mDisplayInfo;
+EFI_HANDLE                  mUefiSevenImage       = NULL;
+EFI_LOADED_IMAGE_PROTOCOL   *mUefiSevenImageInfo  = NULL;
+BOOLEAN                     mVerboseMode          = FALSE;
+BOOLEAN                     mSkipErrors           = FALSE;
+BOOLEAN                     mForceFakevesa        = FALSE;
 
 
 /**
@@ -337,6 +64,10 @@ ShimVesaInformation (
   UINT32                VerticalOffsetPx;
   EFI_PHYSICAL_ADDRESS  FrameBufferBaseWithOffset;
 
+  if ((StartAddress == 0) || (EndAddress == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
   //
   // Get basic video hardware information first.
   //
@@ -349,30 +80,30 @@ ShimVesaInformation (
   // VESA general information.
   //
   VbeInfoFull = (VBE_INFO *)(UINTN)StartAddress;
-  VbeInfo = &VbeInfoFull->Base;
+  VbeInfo   = &VbeInfoFull->Base;
   BufferPtr = VbeInfoFull->Buffer;
   CopyMem (VbeInfo->Signature, "VESA", 4);
   VbeInfo->VesaVersion                  = 0x0300;
   VbeInfo->OemNameAddress               = (UINT32)StartAddress << 12 | (UINT16)(UINTN)BufferPtr;
-  CopyMem (BufferPtr, VENDOR_NAME, sizeof VENDOR_NAME);
-  BufferPtr += sizeof VENDOR_NAME;
+  CopyMem (BufferPtr, VENDOR_NAME, sizeof (VENDOR_NAME));
+  BufferPtr += sizeof (VENDOR_NAME);
   VbeInfo->Capabilities                 = BIT0;     // DAC width supports 8-bit color mode
   VbeInfo->ModeListAddress              = (UINT32)StartAddress << 12 | (UINT16)(UINTN)BufferPtr;
-  *(UINT16*)BufferPtr = 0x00f1;     // mode number
+  *(UINT16*)BufferPtr = 0x00F1;   // mode number
   BufferPtr += 2;
-  *(UINT16*)BufferPtr = 0xFFFF;     // mode list terminator
+  *(UINT16*)BufferPtr = 0xFFFF;   // mode list terminator
   BufferPtr += 2;
-  VbeInfo->VideoMem64K                  = (UINT16)((DisplayInfo.FrameBufferSize + 65535) / 65536);
+  VbeInfo->VideoMem64K                  = (UINT16)((mDisplayInfo.FrameBufferSize + 65535) / 65536);
   VbeInfo->OemSoftwareVersion           = 0x0000;
   VbeInfo->VendorNameAddress            = (UINT32)StartAddress << 12 | (UINT16)(UINTN)BufferPtr;
-  CopyMem (BufferPtr, VENDOR_NAME, sizeof VENDOR_NAME);
-  BufferPtr += sizeof VENDOR_NAME;
+  CopyMem (BufferPtr, VENDOR_NAME, sizeof (VENDOR_NAME));
+  BufferPtr += sizeof (VENDOR_NAME);
   VbeInfo->ProductNameAddress           = (UINT32)StartAddress << 12 | (UINT16)(UINTN)BufferPtr;
-  CopyMem (BufferPtr, PRODUCT_NAME, sizeof PRODUCT_NAME);
-  BufferPtr += sizeof PRODUCT_NAME;
+  CopyMem (BufferPtr, PRODUCT_NAME, sizeof (PRODUCT_NAME));
+  BufferPtr += sizeof (PRODUCT_NAME);
   VbeInfo->ProductRevAddress            = (UINT32)StartAddress << 12 | (UINT16)(UINTN)BufferPtr;
-  CopyMem (BufferPtr, PRODUCT_REVISION, sizeof PRODUCT_REVISION);
-  BufferPtr += sizeof PRODUCT_REVISION;
+  CopyMem (BufferPtr, PRODUCT_REVISION, sizeof (PRODUCT_REVISION));
+  BufferPtr += sizeof (PRODUCT_REVISION);
 
   //
   // Basic VESA mode information.
@@ -385,7 +116,7 @@ ShimVesaInformation (
   // bit5: mode not VGA-compatible (do not access VGA I/O ports and registers)
   // bit6: disable windowed memory mode = linear framebuffer only
   // bit7: linear framebuffer supported
-  VbeModeInfo->ModeAttr = BIT7 | BIT6 | BIT5 | BIT4 | BIT3 | BIT1 | BIT0;
+  VbeModeInfo->ModeAttr                 = BIT7 | BIT6 | BIT5 | BIT4 | BIT3 | BIT1 | BIT0;
 
   //
   // Resolution.
@@ -398,9 +129,9 @@ ShimVesaInformation (
   //
   // Center visible image on screen using framebuffer offset.
   //
-  HorizontalOffsetPx        = (DisplayInfo.HorizontalResolution - 1024) / 2;
-  VerticalOffsetPx          = (DisplayInfo.VerticalResolution - 768) / 2 * DisplayInfo.PixelsPerScanLine;
-  FrameBufferBaseWithOffset = DisplayInfo.FrameBufferBase
+  HorizontalOffsetPx        = (mDisplayInfo.HorizontalResolution - 1024) / 2;
+  VerticalOffsetPx          = (mDisplayInfo.VerticalResolution - 768) / 2 * mDisplayInfo.PixelsPerScanLine;
+  FrameBufferBaseWithOffset = mDisplayInfo.FrameBufferBase
                                 + VerticalOffsetPx * 4      // 4 bytes per pixel
                                 + HorizontalOffsetPx * 4;   // 4 bytes per pixel
 
@@ -409,8 +140,8 @@ ShimVesaInformation (
   //
   VbeModeInfo->NumBanks                 = 1;      // disable memory banking
   VbeModeInfo->BankSizeKB               = 0;      // disable memory banking
-  VbeModeInfo->LfbAddress               = (UINT32)FrameBufferBaseWithOffset;          // 32-bit physical address
-  VbeModeInfo->BytesPerScanLineLinear   = (UINT16)DisplayInfo.PixelsPerScanLine * 4;  // logical bytes in linear modes
+  VbeModeInfo->LfbAddress               = (UINT32)FrameBufferBaseWithOffset;            // 32-bit physical address
+  VbeModeInfo->BytesPerScanLineLinear   = (UINT16)mDisplayInfo.PixelsPerScanLine * 4;   // logical bytes in linear modes
   VbeModeInfo->NumImagePagesLessOne     = 0;      // disable image paging
   VbeModeInfo->NumImagesLessOneLinear   = 0;      // disable image paging
   VbeModeInfo->WindowPositioningAddress = 0x0;    // force windowing to Function 5h
@@ -433,18 +164,18 @@ ShimVesaInformation (
   VbeModeInfo->RedMaskSizeLinear        = 8;
   VbeModeInfo->ReservedMaskSizeLinear   = 8;
 
-  if (DisplayInfo.PixelFormat == PixelBlueGreenRedReserved8BitPerColor) {
+  if (mDisplayInfo.PixelFormat == PixelBlueGreenRedReserved8BitPerColor) {
     VbeModeInfo->BlueMaskPosLinear      = 0;      // blue offset
     VbeModeInfo->GreenMaskPosLinear     = 8;      // green offset
     VbeModeInfo->RedMaskPosLinear       = 16;     // red offset
     VbeModeInfo->ReservedMaskPosLinear  = 24;     // reserved offset
-  } else if (DisplayInfo.PixelFormat == PixelRedGreenBlueReserved8BitPerColor) {
+  } else if (mDisplayInfo.PixelFormat == PixelRedGreenBlueReserved8BitPerColor) {
     VbeModeInfo->RedMaskPosLinear       = 0;      // red offset
     VbeModeInfo->GreenMaskPosLinear     = 8;      // green offset
     VbeModeInfo->BlueMaskPosLinear      = 16;     // blue offset
     VbeModeInfo->ReservedMaskPosLinear  = 24;     // alpha offset
   } else {
-    PrintError (L"Unsupported value of PixelFormat (%d), aborting\n", DisplayInfo.PixelFormat);
+    PrintError (L"Unsupported value of PixelFormat (%d), aborting\n", mDisplayInfo.PixelFormat);
     return EFI_UNSUPPORTED;
   }
 
@@ -473,25 +204,27 @@ ShimVesaInformation (
 
 **/
 BOOLEAN
-IsInt10hHandlerDefined ()
+IsInt10hHandlerDefined (
+  VOID
+  )
 {
-  CONST STATIC UINT8    PROTECTIVE_OPCODE_1 = 0xff;
+  CONST STATIC UINT8    PROTECTIVE_OPCODE_1 = 0xFF;
   CONST STATIC UINT8    PROTECTIVE_OPCODE_2 = 0x00;
-  IVT_ENTRY       *Int10hEntry;
+  IVT_ENTRY             *Int10hEntry;
   EFI_PHYSICAL_ADDRESS  Int10hHandler;
-  UINT8         Opcode;
+  UINT8                 Opcode;
 
   // Fetch 10h entry in IVT.
   Int10hEntry = (IVT_ENTRY *)(UINTN)IVT_ADDRESS + 0x10;
   // Convert handler address from real mode segment address to 32bit physical address.
   Int10hHandler = (Int10hEntry->Segment << 4) + Int10hEntry->Offset;
 
-  if (Int10hHandler >= VGA_ROM_ADDRESS && Int10hHandler < (VGA_ROM_ADDRESS+VGA_ROM_SIZE)) {
+  if ((Int10hHandler >= VGA_ROM_ADDRESS) && (Int10hHandler < (VGA_ROM_ADDRESS + VGA_ROM_SIZE))) {
     PrintDebug (L"Int10h IVT entry points at location within VGA ROM memory area (%04x:%04x)\n",
       Int10hEntry->Segment, Int10hEntry->Offset);
 
     Opcode = *((UINT8 *)Int10hHandler);
-    if (Opcode == PROTECTIVE_OPCODE_1 || Opcode == PROTECTIVE_OPCODE_2) {
+    if ((Opcode == PROTECTIVE_OPCODE_1) || (Opcode == PROTECTIVE_OPCODE_2)) {
       PrintDebug (L"First Int10h handler instruction at %04x:%04x (%02x) not valid, rejecting handler\n",
         Int10hEntry->Segment, Int10hEntry->Offset, Opcode);
       return FALSE;
@@ -535,6 +268,10 @@ EnsureMemoryLock (
   EFI_LEGACY_REGION2_PROTOCOL   *mLegacyRegion2 = NULL;
   CONST CHAR16                  *OperationStr;
 
+  if ((StartAddress == 0) || (Length == 0)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
   switch (Operation) {
     case UNLOCK:
       OperationStr = L"unlock";
@@ -549,10 +286,10 @@ EnsureMemoryLock (
   //
   // Check if we need to perform any operation.
   //
-  if (Operation == UNLOCK && CanWriteAtAddress (StartAddress)) {
+  if ((Operation == UNLOCK) && CanWriteAtAddress (StartAddress)) {
     PrintDebug (L"Memory at %x already %sed\n", StartAddress, OperationStr);
     Status = EFI_SUCCESS;
-  } else if (Operation == LOCK && !CanWriteAtAddress (StartAddress)) {
+  } else if ((Operation == LOCK) && !CanWriteAtAddress (StartAddress)) {
     PrintDebug (L"Memory at %x already %sed\n", StartAddress, OperationStr);
     Status = EFI_SUCCESS;
   }
@@ -564,10 +301,10 @@ EnsureMemoryLock (
     Status = gBS->LocateProtocol (&gEfiLegacyRegionProtocolGuid, NULL, (VOID **)&mLegacyRegion);
     if (!EFI_ERROR (Status)) {
       if (Operation == UNLOCK) {
-        Status = mLegacyRegion->UnLock (mLegacyRegion, (UINT32)StartAddress, Length, &Granularity);
+        /*Status =*/ mLegacyRegion->UnLock (mLegacyRegion, (UINT32)StartAddress, Length, &Granularity);
         Status = CanWriteAtAddress (StartAddress) ? EFI_SUCCESS : EFI_DEVICE_ERROR;
       } else {
-        Status = mLegacyRegion->Lock (mLegacyRegion, (UINT32)StartAddress, Length, &Granularity);
+        /*Status =*/ mLegacyRegion->Lock (mLegacyRegion, (UINT32)StartAddress, Length, &Granularity);
         Status = CanWriteAtAddress (StartAddress) ? EFI_DEVICE_ERROR : EFI_SUCCESS;
       }
 
@@ -585,10 +322,10 @@ EnsureMemoryLock (
     Status = gBS->LocateProtocol (&gEfiLegacyRegion2ProtocolGuid, NULL, (VOID **)&mLegacyRegion2);
     if (!EFI_ERROR (Status)) {
       if (Operation == UNLOCK) {
-        Status = mLegacyRegion2->UnLock (mLegacyRegion2, (UINT32)StartAddress, Length, &Granularity);
+        /*Status =*/ mLegacyRegion2->UnLock (mLegacyRegion2, (UINT32)StartAddress, Length, &Granularity);
         Status = CanWriteAtAddress (StartAddress) ? EFI_SUCCESS : EFI_DEVICE_ERROR;;
       } else {
-        Status = mLegacyRegion2->Lock (mLegacyRegion2, (UINT32)StartAddress, Length, &Granularity);
+        /*Status =*/ mLegacyRegion2->Lock (mLegacyRegion2, (UINT32)StartAddress, Length, &Granularity);
         Status = CanWriteAtAddress (StartAddress) ? EFI_DEVICE_ERROR : EFI_SUCCESS;
       }
 
@@ -602,7 +339,7 @@ EnsureMemoryLock (
   //
   // Try to lock/unlock via an MTRR.
   //
-  if (EFI_ERROR (Status) && IsMtrrSupported () && FIXED_MTRR_SIZE >= Length) {
+  if (EFI_ERROR (Status) && IsMtrrSupported () && (FIXED_MTRR_SIZE >= Length)) {
     if (Operation == UNLOCK) {
       MtrrSetMemoryAttribute (StartAddress, FIXED_MTRR_SIZE, CacheUncacheable);
       Status = CanWriteAtAddress (StartAddress) ? EFI_SUCCESS : EFI_DEVICE_ERROR;
@@ -659,6 +396,7 @@ CanWriteAtAddress (
   return CanWrite;
 }
 
+
 /**
   Displays an animated logo. It has to be stored in a .bmp file
   whose filename (sans extension) has to match the runtime filename
@@ -682,18 +420,26 @@ ShowAnimatedLogo (
   )
 {
   EFI_STATUS  Status;
-  CHAR16      *BmpFilePath;
-  CHAR16      *MyFilePath;
+  CHAR16      *BmpFilePath = NULL;
+  CHAR16      *MyFilePath = NULL;
   UINT8       *BmpFileContents;
   UINTN       BmpFileBytes;
   IMAGE       *WindowsFlag = NULL;
 
+  if (mUefiSevenImageInfo == NULL) {
+    return FALSE;
+  }
+
   // Check if <MyName>.bmp exists
-  MyFilePath = PathCleanUpDirectories (ConvertDevicePathToText (UefiSevenImageInfo->FilePath, FALSE, FALSE));
-  Status = ChangeExtension (MyFilePath, L"bmp", (VOID **)&BmpFilePath);
-  FreePool (MyFilePath);
-  if (EFI_ERROR (Status) || !FileExists (BmpFilePath)) {
-    FreePool (BmpFilePath);
+  MyFilePath = PathCleanUpDirectories (ConvertDevicePathToText (mUefiSevenImageInfo->FilePath, FALSE, FALSE));
+  if (MyFilePath != NULL) {
+    Status = ChangeExtension (MyFilePath, L"bmp", (VOID **)&BmpFilePath);
+    FreePool (MyFilePath);
+  }
+  if (EFI_ERROR (Status) || (BmpFilePath == NULL) || !FileExists (BmpFilePath)) {
+    if (BmpFilePath != NULL) {
+      FreePool (BmpFilePath);
+    }
     return FALSE;
   }
 
@@ -734,7 +480,7 @@ PrintFuncNameMessage (
   CHAR16    *Buffer;
   UINTN     BufferSize;
 
-  if (!(IsError || VerboseMode)) {
+  if ((FuncName == NULL) || (FormatString == NULL) || !(IsError || mVerboseMode)) {
     return;
   }
 
@@ -797,4 +543,278 @@ WaitForEnterAndStall (
 {
   WaitForEnter (PrintMessage);
   gBS->Stall (1000 * 1000); // 1 second
+}
+
+
+/**
+  The entry point for the application.
+
+  @param[in] ImageHandle    The firmware allocated handle for the EFI image.
+  @param[in] SystemTable    A pointer to the EFI System Table.
+
+  @retval EFI_SUCCESS       VGA ROM shim has been installed successfully
+                            or it was found not to be required.
+  @retval other             Some error occured during execution.
+
+**/
+EFI_STATUS
+EFIAPI
+UefiMain (
+  IN EFI_HANDLE         ImageHandle,
+  IN EFI_SYSTEM_TABLE   *SystemTable
+  )
+{
+  EFI_PHYSICAL_ADDRESS    Int10hHandlerAddress;
+  IVT_ENTRY               *IvtInt10hHandlerEntry;
+  IVT_ENTRY               NewInt10hHandlerEntry;
+  EFI_PHYSICAL_ADDRESS    IvtAddress;
+  EFI_STATUS              Status;
+  EFI_STATUS              IvtAllocationStatus;
+  EFI_STATUS              IvtFreeStatus;
+  EFI_INPUT_KEY           Key;
+  CHAR16                  *LaunchPath = NULL;
+  CHAR16                  *EfiFilePath = NULL;
+  CHAR16                  *VerboseFilePath = NULL;
+  CHAR16                  *SkipFilePath = NULL;
+  CHAR16                  *FFVFilePath = NULL;
+
+  //
+  // Try freeing IVT memory area in case it has already been allocated.
+  //
+  IvtFreeStatus = gBS->FreePages (IVT_ADDRESS, 1);
+
+  //
+  // Claim real mode IVT memory area before any allocation can
+  // grab it. This can be done as the IDT has already been
+  // initialized so we can overwrite the IVT.
+  //
+  IvtAddress = IVT_ADDRESS;
+  IvtAllocationStatus = gBS->AllocatePages (AllocateAddress, EfiBootServicesCode, 1, &IvtAddress);
+
+  PrintDebug (L"Force free IVT area result: %r\n", IvtFreeStatus);
+
+  //
+  // Initialization.
+  //
+  mUefiSevenImage = ImageHandle;
+  Status = gBS->HandleProtocol (mUefiSevenImage, &gEfiLoadedImageProtocolGuid, (VOID **)&mUefiSevenImageInfo);
+  if (EFI_ERROR (Status)) {
+    PrintError (L"Unable to locate EFI_LOADED_IMAGE_PROTOCOL, aborting\n");
+    goto Exit;
+  }
+
+  EfiFilePath = PathCleanUpDirectories (ConvertDevicePathToText (mUefiSevenImageInfo->FilePath, FALSE, FALSE));
+  if (EfiFilePath == NULL) {
+    PrintError (L"Unable to locate self-path, aborting\n");
+    goto Exit;
+  }
+
+  //
+  // Check if we should skip warnings and prompts
+  //
+  Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.skiperrors", (VOID **)&SkipFilePath);
+  if (!EFI_ERROR (Status)) {
+    mSkipErrors = FileExists (SkipFilePath);
+    FreePool (SkipFilePath);
+  }
+
+  //
+  // Check if we should force fakevesa
+  //
+  Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.force_fakevesa", (VOID **)&FFVFilePath);
+  if (!EFI_ERROR (Status)) {
+    mForceFakevesa = FileExists (FFVFilePath);
+    FreePool (FFVFilePath);
+  }
+
+  //
+  // Check if we should run in verbose mode
+  //
+  Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.verbose", (VOID **)&VerboseFilePath);
+  if (!EFI_ERROR (Status)) {
+    mVerboseMode = FileExists (VerboseFilePath);
+    FreePool (VerboseFilePath);
+  }
+
+  //
+  // Check if we should run in verbose mode ('v' is pressed).
+  //
+  if (!mVerboseMode) {
+    Status = gST->ConIn->ReadKeyStroke (gST->ConIn, &Key);
+    if (!EFI_ERROR (Status) && (Key.UnicodeChar == L'v')) {
+      mVerboseMode = TRUE;
+    }
+  }
+
+  PrintDebug (L"UefiSeven %s\n", VERSION);
+
+  if (mVerboseMode) {
+    PrintDebug (L"You are running in verbose mode, press Enter to continue\n");
+    WaitForEnter (FALSE);
+  }
+
+  //
+  // Show animated logo.
+  //
+  //if (!mVerboseMode) {
+  //  ShowAnimatedLogo ();
+  //}
+
+  //
+  // Windows 7 prefers a 1024x768 resolution.
+  //
+  SwitchVideoMode (1024, 768);
+  if (mVerboseMode) {
+    PrintVideoInfo ();
+  }
+
+  if (!MatchCurrentResolution (1024, 768)) {
+    PrintError (L"Current display does not seem to support changing to 1024x768 resolution\n");
+    PrintError (L"which is the minimum requirement of Windows 7.\n");
+    PrintError (L"It is likely that Windows might fail to boot even with the handler installed.\n");
+    PrintError (L"Press Enter to try a new 'hack' that will force the display driver to work.\n");
+    PrintError (L"The display might be glitchy but it will be able to provide a workable screen.\n");
+    if (!mSkipErrors) {
+      WaitForEnter (FALSE);
+    }
+    ForceVideoModeHack (1024, 768);
+  }
+
+  //
+  // If an Int10h handler exists there either is a real
+  // VGA ROM in operation or we installed the shim before.
+  //
+  if (!mForceFakevesa) {
+    if (IsInt10hHandlerDefined ()) {
+      PrintDebug (L"Int10h already has a handler, no further action required\n");
+      goto Exit;
+    }
+  } else {
+    PrintDebug (L"Overwriting int10h handler with fakevesa...\n");
+  }
+
+  //
+  // Sanity checks.
+  //
+  if (sizeof (INT10H_HANDLER) > VGA_ROM_SIZE) {
+    PrintError (L"Shim size bigger than allowed (%u > %u), aborting\n",
+      sizeof (INT10H_HANDLER), VGA_ROM_SIZE);
+    goto Exit;
+  }
+
+  //
+  // Unlock VGA ROM memory area for writing first.
+  //
+  Status = EnsureMemoryLock (VGA_ROM_ADDRESS, (UINT32)VGA_ROM_SIZE, UNLOCK);
+  if (EFI_ERROR (Status)) {
+    PrintError (L"Unable to unlock VGA ROM memory at %04x, aborting\n", VGA_ROM_ADDRESS);
+    goto Exit;
+  }
+
+  //
+  // Copy ROM stub in place and fill in the missing information.
+  //
+  ZeroMem ((VOID *)VGA_ROM_ADDRESS, VGA_ROM_SIZE);
+  CopyMem ((VOID *)VGA_ROM_ADDRESS, INT10H_HANDLER, sizeof (INT10H_HANDLER));
+  Status = ShimVesaInformation (VGA_ROM_ADDRESS, &Int10hHandlerAddress);
+  if (EFI_ERROR (Status)) {
+    PrintError (L"VESA information could not be filled in, aborting\n");
+    goto Exit;
+  } else {
+    // Convert from 32bit physical address to real mode segment address.
+    NewInt10hHandlerEntry.Segment = (UINT16)((UINT32)VGA_ROM_ADDRESS >> 4);
+    NewInt10hHandlerEntry.Offset  = (UINT16)(Int10hHandlerAddress - VGA_ROM_ADDRESS);
+    PrintDebug (L"VESA information filled in, Int10h handler address=%x (%04x:%04x)\n",
+      Int10hHandlerAddress, NewInt10hHandlerEntry.Segment, NewInt10hHandlerEntry.Offset);
+  }
+
+  //
+  // Lock VGA ROM memory area to prevent further writes.
+  //
+  Status = EnsureMemoryLock (VGA_ROM_ADDRESS, (UINT32)VGA_ROM_SIZE, LOCK);
+  if (EFI_ERROR (Status)) {
+    PrintDebug (L"Unable to lock VGA ROM memory at %x but this is not essential\n",
+      VGA_ROM_ADDRESS);
+  }
+
+  //
+  // Try to point the Int10h vector at shim entry point.
+  //
+  IvtInt10hHandlerEntry = (IVT_ENTRY *)IVT_ADDRESS + 0x10;
+  if (!EFI_ERROR (IvtAllocationStatus)) {
+    IvtInt10hHandlerEntry->Segment = NewInt10hHandlerEntry.Segment;
+    IvtInt10hHandlerEntry->Offset = NewInt10hHandlerEntry.Offset;
+    PrintDebug (L"Int10h IVT entry modified to point at %04x:%04x\n",
+      IvtInt10hHandlerEntry->Segment, IvtInt10hHandlerEntry->Offset);
+  } else if (IvtInt10hHandlerEntry->Segment == NewInt10hHandlerEntry.Segment
+    && IvtInt10hHandlerEntry->Offset == NewInt10hHandlerEntry.Offset) {
+    PrintDebug (L"Int10h IVT entry could not be modified but already pointing at %04x:%04x\n",
+      IvtInt10hHandlerEntry->Segment, IvtInt10hHandlerEntry->Offset);
+  } else {
+    PrintError (L"Unable to claim IVT area at %04x (error: %r)\n", IVT_ADDRESS, IvtAllocationStatus);
+    PrintError (L"Int10h IVT entry could not be modified and currently poiting\n");
+    PrintError (L"at a wrong memory area (%04x:%04x instead of %04x:%04x).\n",
+      IvtInt10hHandlerEntry->Segment, IvtInt10hHandlerEntry->Offset,
+      NewInt10hHandlerEntry.Segment, NewInt10hHandlerEntry.Offset);
+    PrintError (L"Press Enter to try to continue.\n");
+    if (!mSkipErrors) {
+      WaitForEnter (FALSE);
+    }
+  }
+
+  //
+  // Double check if the handler has been installed properly
+  //
+  if (IsInt10hHandlerDefined ()) {
+    PrintDebug (L"Pre-boot Int10h sanity check success\n");
+  } else {
+    PrintError (L"Pre-boot Int10h sanity check failed\n");
+    PrintError (L"Press Enter to continue.\n");
+    if (!mSkipErrors) {
+      WaitForEnter (FALSE);
+    }
+  }
+
+  Exit:
+
+  //
+  // Check if we can chainload the Windows Boot Manager.
+  //
+  if (EfiFilePath != NULL) {
+    Status = ChangeExtension (EfiFilePath, L"original.efi", (VOID **)&LaunchPath);
+    FreePool (EfiFilePath);
+  } else {
+    Status = EFI_NOT_FOUND;
+  }
+  if (!EFI_ERROR (Status) && FileExists (LaunchPath)) {
+    PrintDebug (L"Found Windows Boot Manager at '%s'\n", LaunchPath);
+  } else {
+    PrintError (L"Could not find Windows Boot Manager at '%s'\n", LaunchPath);
+    //PrintError (L"Rename the original bootx64.efi from efi\\boot\\ to bootx64.original.efi\n");
+    PrintError (L"Press Enter to continue.\n");
+    WaitForEnter (FALSE);
+  }
+
+  //
+  // Make it possible to enter Windows Boot Manager.
+  //
+  if (!mVerboseMode) {
+    Status = gST->ConIn->ReadKeyStroke (gST->ConIn, &Key);
+    if (!EFI_ERROR (Status) && Key.ScanCode == SCAN_F8) {
+      PrintError (L"F8 keypress detected, switching to text mode\n");
+      PrintError (L"Press Enter to continue and then immediately press F8 again\n");
+      WaitForEnterAndStall (FALSE);
+    }
+  } else {
+    // For debug mode we should also detect F8 and then wait a little
+    // to allow user to fill key buffer with F8 in time but this
+    // waiting will be done by the Lauch method.
+  }
+
+  if (LaunchPath != NULL) {
+    Launch (LaunchPath, mVerboseMode ? &WaitForEnterAndStall : NULL);
+    FreePool (LaunchPath);
+  }
+
+  return EFI_SUCCESS;
 }

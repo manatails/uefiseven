@@ -13,8 +13,8 @@
 
 **/
 
-#ifndef __FILESYSTEM_H__
-#define __FILESYSTEM_H__
+#ifndef __FILESYSTEM_H
+#define __FILESYSTEM_H
 
 
 /**
@@ -90,8 +90,8 @@ Launch (
   -----------------------------------------------------------------------------
 **/
 
-extern  EFI_HANDLE                  UefiSevenImage;
-extern  EFI_LOADED_IMAGE_PROTOCOL   *UefiSevenImageInfo;
+extern  EFI_HANDLE                  mUefiSevenImage;
+extern  EFI_LOADED_IMAGE_PROTOCOL   *mUefiSevenImageInfo;
 
 
 #endif

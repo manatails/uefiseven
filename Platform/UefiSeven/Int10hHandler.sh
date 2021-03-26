@@ -76,8 +76,8 @@ cut -c 11-28 -- "$STEM".disasm \
       "$(basename -- "$0")"
   printf '//\n'
   printf '#include <Uefi.h>\n'
-  printf '#ifndef _INT10H_HANDLER_H_\n'
-  printf '#define _INT10H_HANDLER_H_\n'
+  printf '#ifndef __INT10H_HANDLER_H\n'
+  printf '#define __INT10H_HANDLER_H\n'
   printf 'STATIC CONST UINT8 INT10H_HANDLER[] = {\n'
   paste -d ' ' -- "$STEM".offsets "$STEM".insns "$STEM".bytes
   printf '};\n'

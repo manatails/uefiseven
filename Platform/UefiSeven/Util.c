@@ -22,9 +22,11 @@ StrToLowercase (
 {
   CHAR16  *TmpStr;
 
-  for (TmpStr = String; *TmpStr != L'\0'; TmpStr++) {
-    if (*TmpStr >= L'A' && *TmpStr <= L'Z') {
-      *TmpStr = (CHAR16)(*TmpStr - L'A' + L'a');
+  if (String != NULL) {
+    for (TmpStr = String; *TmpStr != L'\0'; TmpStr++) {
+      if ((*TmpStr >= L'A') && (*TmpStr <= L'Z')) {
+        *TmpStr = (CHAR16)(*TmpStr - L'A' + L'a');
+      }
     }
   }
 }

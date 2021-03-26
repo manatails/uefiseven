@@ -19,29 +19,10 @@
 
 /**
   -----------------------------------------------------------------------------
-  Local method signatures.
-  -----------------------------------------------------------------------------
-**/
-
-EFI_STATUS
-CalculatePositionForCenter (
-  IN    UINTN   ImageWidth,
-  IN    UINTN   ImageHeight,
-  OUT   UINTN   *PositionX,
-  OUT   UINTN   *PositionY
-  );
-
-EFI_STATUS
-InitializeDisplay (
-  VOID
-  );
-
-
-/**
-  -----------------------------------------------------------------------------
   Local method implementations.
   -----------------------------------------------------------------------------
 **/
+
 
 /**
   Scans the system for Graphics Output Protocol (GOP) and
@@ -50,7 +31,7 @@ InitializeDisplay (
   retrieved and stored for later use.
 
   @retval EFI_SUCCESS     An adapter was found and its current
-                          mode parameters stored in DisplayInfo
+                          mode parameters stored in mDisplayInfo
                           global variable.
   @retval other           No compatible adapters were found or
                           their mode parameters could not be
@@ -67,29 +48,29 @@ InitializeDisplay (
   UINT32        Temp2;
 
   // Sets AdapterFound = FALSE and Protocol = NONE
-  SetMem (&DisplayInfo, sizeof (DISPLAY_INFO), 0);
+  ZeroMem (&mDisplayInfo, sizeof (DISPLAY_INFO));
 
   //
   // Try a GOP adapter first.
   //
-  Status = gBS->HandleProtocol (gST->ConsoleOutHandle, &gEfiGraphicsOutputProtocolGuid, (VOID **)&DisplayInfo.GOP);
+  Status = gBS->HandleProtocol (gST->ConsoleOutHandle, &gEfiGraphicsOutputProtocolGuid, (VOID **)&mDisplayInfo.GOP);
   if (EFI_ERROR (Status)) {
-    Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&DisplayInfo.GOP);
+    Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **)&mDisplayInfo.GOP);
   }
   if (!EFI_ERROR (Status)) {
     PrintDebug (L"Found a GOP display adapter\n");
 
-    DisplayInfo.HorizontalResolution  = DisplayInfo.GOP->Mode->Info->HorizontalResolution;
-    DisplayInfo.VerticalResolution    = DisplayInfo.GOP->Mode->Info->VerticalResolution;
-    DisplayInfo.PixelFormat           = DisplayInfo.GOP->Mode->Info->PixelFormat;
-    DisplayInfo.PixelsPerScanLine     = DisplayInfo.GOP->Mode->Info->PixelsPerScanLine;
-    DisplayInfo.FrameBufferBase       = DisplayInfo.GOP->Mode->FrameBufferBase;
+    mDisplayInfo.HorizontalResolution  = mDisplayInfo.GOP->Mode->Info->HorizontalResolution;
+    mDisplayInfo.VerticalResolution    = mDisplayInfo.GOP->Mode->Info->VerticalResolution;
+    mDisplayInfo.PixelFormat           = mDisplayInfo.GOP->Mode->Info->PixelFormat;
+    mDisplayInfo.PixelsPerScanLine     = mDisplayInfo.GOP->Mode->Info->PixelsPerScanLine;
+    mDisplayInfo.FrameBufferBase       = mDisplayInfo.GOP->Mode->FrameBufferBase;
     // usually = PixelsPerScanLine * VerticalResolution * BytesPerPixel
     // for MacBookAir7,2: 1536 * 900 * 4 = 5,529,600 bytes
-    DisplayInfo.FrameBufferSize       = DisplayInfo.GOP->Mode->FrameBufferSize;
+    mDisplayInfo.FrameBufferSize       = mDisplayInfo.GOP->Mode->FrameBufferSize;
 
-    DisplayInfo.Protocol              = GOP;
-    DisplayInfo.AdapterFound          = TRUE;
+    mDisplayInfo.Protocol              = GOP;
+    mDisplayInfo.AdapterFound          = TRUE;
     goto Exit;
   } else {
     PrintDebug (L"GOP display adapter not found\n");
@@ -98,36 +79,46 @@ InitializeDisplay (
   //
   // Try a UGA adapter.
   //
-  DisplayInfo.GOP = NULL;
-  Status = gBS->HandleProtocol (gST->ConsoleOutHandle, &gEfiUgaDrawProtocolGuid, (VOID **)&DisplayInfo.UGA);
+  mDisplayInfo.GOP = NULL;
+  Status = gBS->HandleProtocol (gST->ConsoleOutHandle, &gEfiUgaDrawProtocolGuid, (VOID **)&mDisplayInfo.UGA);
   if (EFI_ERROR (Status)) {
-    Status = gBS->LocateProtocol (&gEfiUgaDrawProtocolGuid, NULL, (VOID **)&DisplayInfo.UGA);
+    Status = gBS->LocateProtocol (&gEfiUgaDrawProtocolGuid, NULL, (VOID **)&mDisplayInfo.UGA);
   }
   if (!EFI_ERROR (Status)) {
     PrintDebug (L"Found a UGA display adapter\n");
-    Status = DisplayInfo.UGA->GetMode (DisplayInfo.UGA, &DisplayInfo.HorizontalResolution, &DisplayInfo.VerticalResolution, &Temp1, &Temp2);
+    Status = mDisplayInfo.UGA->GetMode (
+                                  mDisplayInfo.UGA,
+                                  &mDisplayInfo.HorizontalResolution,
+                                  &mDisplayInfo.VerticalResolution,
+                                  &Temp1,
+                                  &Temp2
+                                  );
     if (EFI_ERROR (Status)) {
       PrintError (L"Unable to get current UGA mode (error: %r)\n", Status);
-      DisplayInfo.UGA = NULL;
+      mDisplayInfo.UGA = NULL;
       goto Exit;
     } else {
       PrintDebug (L"Received current UGA mode information\n");
     }
-    DisplayInfo.PixelFormat   = PixelBlueGreenRedReserved8BitPerColor; // default for UGA
+
+    mDisplayInfo.PixelFormat   = PixelBlueGreenRedReserved8BitPerColor; // default for UGA
     // TODO: find framebuffer base
     // TODO: find scanline length
     // https://github.com/coreos/grub/blob/master/grub-core%2Fvideo%2Fefi_uga.c
-    DisplayInfo.Protocol      = UGA;
-    DisplayInfo.AdapterFound  = TRUE;
+    mDisplayInfo.Protocol      = UGA;
+    mDisplayInfo.AdapterFound  = TRUE;
   } else {
     PrintDebug (L"UGA display adapter not found\n");
   }
 
-Exit:
-  if (!DisplayInfo.AdapterFound) {
+  Exit:
+
+  if (!mDisplayInfo.AdapterFound) {
     PrintError (L"No display adapters found\n", Status);
   }
-  DisplayInfo.Initialized = TRUE;
+
+  mDisplayInfo.Initialized    = TRUE;
+
   return Status;
 }
 
@@ -167,24 +158,24 @@ CalculatePositionForCenter (
     return EFI_DEVICE_ERROR;
   }
 
-  if (ImageWidth == 0 || ImageHeight == 0
-    || ImageWidth > DisplayInfo.HorizontalResolution
-    || ImageHeight > DisplayInfo.VerticalResolution
+  if ((ImageWidth == 0) || (ImageHeight == 0)
+    || (ImageWidth > mDisplayInfo.HorizontalResolution)
+    || (ImageHeight > mDisplayInfo.VerticalResolution)
     )
   {
     PrintDebug (L"Wrong image size (%ux%u) for this screen resolution (%ux%u)\n",
-      ImageWidth, ImageHeight, DisplayInfo.HorizontalResolution, DisplayInfo.VerticalResolution);
+      ImageWidth, ImageHeight, mDisplayInfo.HorizontalResolution, mDisplayInfo.VerticalResolution);
     return EFI_INVALID_PARAMETER;
   }
 
-  *PositionX = (DisplayInfo.HorizontalResolution / 2) - (ImageWidth / 2);
-  *PositionY = (DisplayInfo.VerticalResolution / 2) - (ImageHeight / 2);
+  *PositionX = (mDisplayInfo.HorizontalResolution / 2) - (ImageWidth / 2);
+  *PositionY = (mDisplayInfo.VerticalResolution / 2) - (ImageHeight / 2);
 
-  if (*PositionX + ImageWidth > DisplayInfo.HorizontalResolution) {
-    *PositionX = DisplayInfo.HorizontalResolution - ImageWidth;
+  if ((*PositionX + ImageWidth) > mDisplayInfo.HorizontalResolution) {
+    *PositionX = mDisplayInfo.HorizontalResolution - ImageWidth;
   }
-  if (*PositionY + ImageHeight > DisplayInfo.VerticalResolution) {
-    *PositionY = DisplayInfo.VerticalResolution - ImageHeight;
+  if ((*PositionY + ImageHeight) > mDisplayInfo.VerticalResolution) {
+    *PositionY = mDisplayInfo.VerticalResolution - ImageHeight;
   }
 
   //PrintDebug (L"Top left corner position for centered image: %u,%u\n", *PositionX, *PositionY);
@@ -203,10 +194,10 @@ CalculatePositionForCenter (
   Performs the initial scan for graphics adapters if one
   has not been performed yet and returns a simple TRUE/FALSE
   information if one has been found and information about
-  it is ready for use in the global DisplayInfo variable.
+  it is ready for use in the global mDisplayInfo variable.
 
   @retval TRUE    An adapter has been found and its current
-                  mode parameters stored in DisplayInfo
+                  mode parameters stored in mDisplayInfo
                   global variable.
   @retval other   No compatible adapters were found or
                   their mode parameters could not be
@@ -218,10 +209,10 @@ EnsureDisplayAvailable (
   VOID
   )
 {
-  if (!DisplayInfo.Initialized) {
+  if (!mDisplayInfo.Initialized) {
     InitializeDisplay ();
   }
-  return DisplayInfo.AdapterFound && DisplayInfo.Protocol != NONE ? EFI_SUCCESS : EFI_NOT_FOUND;
+  return (mDisplayInfo.AdapterFound && (mDisplayInfo.Protocol != NONE)) ? EFI_SUCCESS : EFI_NOT_FOUND;
 }
 
 
@@ -249,31 +240,35 @@ SwitchVideoMode (
   UINTN                                   SizeOfInfo;
   BOOLEAN                                 MatchFound = FALSE;
 
+  if ((Width == 0) || (Height == 0)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
   if (EFI_ERROR (EnsureDisplayAvailable ())) {
     PrintDebug (L"No display adapters found, unable to switch video mode.\n");
     return EFI_DEVICE_ERROR;
   }
 
-  if (DisplayInfo.Protocol != GOP) {
+  if (mDisplayInfo.Protocol != GOP) {
     PrintError (L"Video mode switching is not supported on UGA display adapters.\n");
     return EFI_UNSUPPORTED;
   }
 
   // Try to switch to a desired resolution
-  MaxMode = DisplayInfo.GOP->Mode->MaxMode;
+  MaxMode = mDisplayInfo.GOP->Mode->MaxMode;
   for (i = 0; i < MaxMode; i++) {
-    Status = DisplayInfo.GOP->QueryMode (DisplayInfo.GOP, i, &SizeOfInfo, &ModeInfo);
+    Status = mDisplayInfo.GOP->QueryMode (mDisplayInfo.GOP, i, &SizeOfInfo, &ModeInfo);
     if (!EFI_ERROR (Status)) {
-      if (ModeInfo->HorizontalResolution == Width
-        && ModeInfo->VerticalResolution == Height
+      if ((ModeInfo->HorizontalResolution == Width)
+        && (ModeInfo->VerticalResolution == Height)
         )
       {
-        if (ModeInfo->PixelFormat == PixelBlueGreenRedReserved8BitPerColor
-          || ModeInfo->PixelFormat == PixelRedGreenBlueReserved8BitPerColor
+        if ((ModeInfo->PixelFormat == PixelBlueGreenRedReserved8BitPerColor)
+          || (ModeInfo->PixelFormat == PixelRedGreenBlueReserved8BitPerColor)
           )
         {
           MatchFound = TRUE;
-          Status = DisplayInfo.GOP->SetMode (DisplayInfo.GOP, i);
+          Status = mDisplayInfo.GOP->SetMode (mDisplayInfo.GOP, i);
           if (EFI_ERROR (Status)) {
             PrintError (L"Failed to switch to Mode %u with desired %ux%u resolution.\n", i, Width, Height);
           } else {
@@ -285,13 +280,13 @@ SwitchVideoMode (
     }
   }
 
-  // Refresh DisplayInfo
-  DisplayInfo.HorizontalResolution  = DisplayInfo.GOP->Mode->Info->HorizontalResolution;
-  DisplayInfo.VerticalResolution    = DisplayInfo.GOP->Mode->Info->VerticalResolution;
-  DisplayInfo.PixelFormat           = DisplayInfo.GOP->Mode->Info->PixelFormat;
-  DisplayInfo.PixelsPerScanLine     = DisplayInfo.GOP->Mode->Info->PixelsPerScanLine;
-  DisplayInfo.FrameBufferBase       = DisplayInfo.GOP->Mode->FrameBufferBase;
-  DisplayInfo.FrameBufferSize       = DisplayInfo.GOP->Mode->FrameBufferSize;
+  // Refresh mDisplayInfo
+  mDisplayInfo.HorizontalResolution  = mDisplayInfo.GOP->Mode->Info->HorizontalResolution;
+  mDisplayInfo.VerticalResolution    = mDisplayInfo.GOP->Mode->Info->VerticalResolution;
+  mDisplayInfo.PixelFormat           = mDisplayInfo.GOP->Mode->Info->PixelFormat;
+  mDisplayInfo.PixelsPerScanLine     = mDisplayInfo.GOP->Mode->Info->PixelsPerScanLine;
+  mDisplayInfo.FrameBufferBase       = mDisplayInfo.GOP->Mode->FrameBufferBase;
+  mDisplayInfo.FrameBufferSize       = mDisplayInfo.GOP->Mode->FrameBufferSize;
 
   gST->ConOut->ClearScreen (gST->ConOut);
 
@@ -301,6 +296,7 @@ SwitchVideoMode (
 
   return Status;
 }
+
 
 EFI_STATUS
 ForceVideoModeHack (
@@ -319,46 +315,50 @@ ForceVideoModeHack (
   UINT32        NewFrameBufferSize;
   UINT32        ScanlineScale = 1;
 
+  if ((Width == 0) || (Height == 0)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
   if (EFI_ERROR (EnsureDisplayAvailable ())) {
     PrintDebug (L"No display adapters found, unable to switch video mode.\n");
     return EFI_DEVICE_ERROR;
   }
 
-  if (DisplayInfo.Protocol != GOP) {
+  if (mDisplayInfo.Protocol != GOP) {
     PrintError (L"Video mode switching is not supported on UGA display adapters.\n");
     return EFI_UNSUPPORTED;
   }
 
   // Save old settings
-  OrigHorizontalResolution  = DisplayInfo.GOP->Mode->Info->HorizontalResolution;
-  OrigVerticalResolution    = DisplayInfo.GOP->Mode->Info->VerticalResolution;
-  OrigPixelsPerScanLine     = DisplayInfo.GOP->Mode->Info->PixelsPerScanLine;
-  OrigFrameBufferSize       = (UINT32)DisplayInfo.GOP->Mode->FrameBufferSize;
+  OrigHorizontalResolution  = mDisplayInfo.GOP->Mode->Info->HorizontalResolution;
+  OrigVerticalResolution    = mDisplayInfo.GOP->Mode->Info->VerticalResolution;
+  OrigPixelsPerScanLine     = mDisplayInfo.GOP->Mode->Info->PixelsPerScanLine;
+  OrigFrameBufferSize       = (UINT32)mDisplayInfo.GOP->Mode->FrameBufferSize;
 
   NewHorizontalResolution   = (UINT32)Width;
   NewVerticalResolution     = (UINT32)Height;
 
-  while (OrigPixelsPerScanLine * ScanlineScale < Width) {
+  while ((OrigPixelsPerScanLine * ScanlineScale) < Width) {
     ScanlineScale++;
   }
 
   NewPixelsPerScanLine      = OrigPixelsPerScanLine * ScanlineScale; // Should be bigger than HorizontalResolution
   NewFrameBufferSize        = NewPixelsPerScanLine * NewVerticalResolution * 4; // PixelsPerScanLine * VerticalResolution * 4
 
-  DisplayInfo.GOP->Mode->Info->HorizontalResolution = NewHorizontalResolution;
-  DisplayInfo.GOP->Mode->Info->VerticalResolution   = NewVerticalResolution;
-  //DisplayInfo.GOP->Mode->Info->PixelFormat = 1;
-  DisplayInfo.GOP->Mode->Info->PixelsPerScanLine    = NewPixelsPerScanLine;
+  mDisplayInfo.GOP->Mode->Info->HorizontalResolution = NewHorizontalResolution;
+  mDisplayInfo.GOP->Mode->Info->VerticalResolution   = NewVerticalResolution;
+  //mDisplayInfo.GOP->Mode->Info->PixelFormat = 1;
+  mDisplayInfo.GOP->Mode->Info->PixelsPerScanLine    = NewPixelsPerScanLine;
 
-  DisplayInfo.GOP->Mode->FrameBufferSize = NewFrameBufferSize;
+  mDisplayInfo.GOP->Mode->FrameBufferSize = NewFrameBufferSize;
 
-  // Refresh DisplayInfo
-  DisplayInfo.HorizontalResolution  = DisplayInfo.GOP->Mode->Info->HorizontalResolution;
-  DisplayInfo.VerticalResolution    = DisplayInfo.GOP->Mode->Info->VerticalResolution;
-  DisplayInfo.PixelFormat           = DisplayInfo.GOP->Mode->Info->PixelFormat;
-  DisplayInfo.PixelsPerScanLine     = DisplayInfo.GOP->Mode->Info->PixelsPerScanLine;
-  DisplayInfo.FrameBufferBase       = DisplayInfo.GOP->Mode->FrameBufferBase;
-  DisplayInfo.FrameBufferSize       = DisplayInfo.GOP->Mode->FrameBufferSize;
+  // Refresh mDisplayInfo
+  mDisplayInfo.HorizontalResolution  = mDisplayInfo.GOP->Mode->Info->HorizontalResolution;
+  mDisplayInfo.VerticalResolution    = mDisplayInfo.GOP->Mode->Info->VerticalResolution;
+  mDisplayInfo.PixelFormat           = mDisplayInfo.GOP->Mode->Info->PixelFormat;
+  mDisplayInfo.PixelsPerScanLine     = mDisplayInfo.GOP->Mode->Info->PixelsPerScanLine;
+  mDisplayInfo.FrameBufferBase       = mDisplayInfo.GOP->Mode->FrameBufferBase;
+  mDisplayInfo.FrameBufferSize       = mDisplayInfo.GOP->Mode->FrameBufferSize;
 
   gST->ConOut->ClearScreen (gST->ConOut);
 
@@ -388,19 +388,19 @@ PrintVideoInfo (
   }
 
   PrintDebug (L"Current mode:\n");
-  PrintDebug (L"  HorizontalResolution = %u\n", DisplayInfo.HorizontalResolution);
-  PrintDebug (L"  VerticalResolution = %u\n", DisplayInfo.VerticalResolution);
-  PrintDebug (L"  PixelFormat = %u\n", DisplayInfo.PixelFormat);
-  PrintDebug (L"  PixelsPerScanLine = %u\n", DisplayInfo.PixelsPerScanLine);
-  PrintDebug (L"  FrameBufferBase = %x\n", DisplayInfo.FrameBufferBase);
-  PrintDebug (L"  FrameBufferSize = %u\n", DisplayInfo.FrameBufferSize);
+  PrintDebug (L"  HorizontalResolution = %u\n", mDisplayInfo.HorizontalResolution);
+  PrintDebug (L"  VerticalResolution = %u\n", mDisplayInfo.VerticalResolution);
+  PrintDebug (L"  PixelFormat = %u\n", mDisplayInfo.PixelFormat);
+  PrintDebug (L"  PixelsPerScanLine = %u\n", mDisplayInfo.PixelsPerScanLine);
+  PrintDebug (L"  FrameBufferBase = %x\n", mDisplayInfo.FrameBufferBase);
+  PrintDebug (L"  FrameBufferSize = %u\n", mDisplayInfo.FrameBufferSize);
 
   // Query available modes.
-  if (DisplayInfo.Protocol == GOP) {
-    MaxMode = DisplayInfo.GOP->Mode->MaxMode;
+  if (mDisplayInfo.Protocol == GOP) {
+    MaxMode = mDisplayInfo.GOP->Mode->MaxMode;
     PrintDebug (L"Available modes (MaxMode = %u):\n", MaxMode);
     for (i = 0; i < MaxMode; i++) {
-      Status = DisplayInfo.GOP->QueryMode (DisplayInfo.GOP, i, &SizeOfInfo, &ModeInfo);
+      Status = mDisplayInfo.GOP->QueryMode (mDisplayInfo.GOP, i, &SizeOfInfo, &ModeInfo);
       if (!EFI_ERROR (Status)) {
         PrintDebug (L"  Mode%u: %ux%u\n", i, ModeInfo->HorizontalResolution, ModeInfo->VerticalResolution);
       }
@@ -419,17 +419,18 @@ MatchCurrentResolution (
   IN UINTN  Height
   )
 {
-  if (EFI_ERROR (EnsureDisplayAvailable ())) {
-    PrintDebug (L"No display adapters found, unable to print display information\n");
-    return FALSE;
+  if ((Width != 0) && (Height != 0)) {
+    if (EFI_ERROR (EnsureDisplayAvailable ())) {
+      PrintDebug (L"No display adapters found, unable to print display information\n");
+    } else if ((mDisplayInfo.HorizontalResolution == Width)
+      && (mDisplayInfo.VerticalResolution == Height)
+      )
+    {
+      return TRUE;
+    }
   }
 
-  if (DisplayInfo.HorizontalResolution == Width && DisplayInfo.VerticalResolution == Height) {
-    return TRUE;
-  }
-  else {
-    return FALSE;
-  }
+  return FALSE;
 }
 
 
@@ -453,6 +454,10 @@ CreateImage (
 {
   IMAGE   *Image;
 
+  if ((Width == 0) || (Height == 0)) {
+    return NULL;
+  }
+
   Image = (IMAGE *)AllocatePool (sizeof (IMAGE));
   if (Image == NULL) {
     return NULL;
@@ -460,13 +465,11 @@ CreateImage (
 
   Image->Width      = Width;
   Image->Height     = Height;
-  Image->PixelData  = (EFI_UGA_PIXEL *)AllocatePool (Width * Height * sizeof (EFI_UGA_PIXEL));
+  Image->PixelData  = (EFI_UGA_PIXEL *)AllocateZeroPool (Width * Height * sizeof (EFI_UGA_PIXEL));
   if (Image->PixelData == NULL) {
     DestroyImage (Image);
     return NULL;
   }
-
-  SetMem (Image->PixelData, sizeof Image->PixelData, 0);
 
   return Image;
 }
@@ -521,27 +524,30 @@ BmpFileToImage (
   OUT VOID    **Result
   )
 {
-  //IMAGE           *Image;
   BMP_HEADER      *BmpHeader;
   UINT8           *BmpCurrentPixel;
   UINT8           *BmpCurrentLine;
   UINTN           LineSizeBytes;
   EFI_UGA_PIXEL   *TargetPixel;
-  UINTN           x, y;
+  UINTN           x;
+  UINTN           y;
 
   // Sanity checks.
-  if (FileData == NULL || FileSizeBytes < sizeof (BMP_HEADER)) {
+  if (Result == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+  if ((FileData == NULL) || (FileSizeBytes < sizeof (BMP_HEADER))) {
     PrintDebug (L"File too small or does not exist\n");
     return EFI_INVALID_PARAMETER;
   }
 
   BmpHeader = (BMP_HEADER *)FileData;
-  if (BmpHeader->Signature[0] != 'B'
-    || BmpHeader->Signature[1] != 'M'
-    || BmpHeader->CompressionType != 0  // only support uncompressed...
-    || BmpHeader->BitPerPixel != 24   // ...24 bits per pixel images
-    || BmpHeader->Width < 1
-    || BmpHeader->Height < 1
+  if ((BmpHeader->Signature[0] != 'B')
+    || (BmpHeader->Signature[1] != 'M')
+    || (BmpHeader->CompressionType != 0)  // only support uncompressed...
+    || (BmpHeader->BitPerPixel != 24)     // ...24 bits per pixel images
+    || (BmpHeader->Width < 1)
+    || (BmpHeader->Height < 1)
     )
   {
     return EFI_INVALID_PARAMETER;
@@ -556,9 +562,9 @@ BmpFileToImage (
 
   // Calculate line size and adjust with padding to multiple of 4 bytes.
   LineSizeBytes = BmpHeader->Width * 3; // 24 bits = 3 bytes
-  LineSizeBytes += (LineSizeBytes % 4) != 0
-    ? (4 - (LineSizeBytes % 4))
-    : 0;
+  LineSizeBytes += ((LineSizeBytes % 4) != 0)
+                      ? (4 - (LineSizeBytes % 4))
+                      : 0;
 
   // Check if we have enough pixel data.
   if (BmpHeader->PixelDataOffset + BmpHeader->Height * LineSizeBytes > FileSizeBytes) {
@@ -603,10 +609,7 @@ ClearScreen (
 {
   EFI_UGA_PIXEL   FillColor;
 
-  FillColor.Red       = 0;
-  FillColor.Green     = 0;
-  FillColor.Blue      = 0;
-  FillColor.Reserved  = 0;
+  ZeroMem (&FillColor, sizeof (EFI_UGA_PIXEL));
 
   if (EFI_ERROR (EnsureDisplayAvailable ())) {
     PrintDebug (L"No display adapters found, unable to clear screen\n");
@@ -615,21 +618,21 @@ ClearScreen (
 
   SwitchToGraphics (FALSE);
 
-  if (DisplayInfo.Protocol == GOP) {
-    DisplayInfo.GOP->Blt (
-                        DisplayInfo.GOP,
+  if (mDisplayInfo.Protocol == GOP) {
+    mDisplayInfo.GOP->Blt (
+                        mDisplayInfo.GOP,
                         (EFI_GRAPHICS_OUTPUT_BLT_PIXEL *)&FillColor,
                         EfiBltVideoFill,
                         0, 0, 0, 0,
-                        DisplayInfo.HorizontalResolution, DisplayInfo.VerticalResolution, 0
+                        mDisplayInfo.HorizontalResolution, mDisplayInfo.VerticalResolution, 0
                         );
-  } else if (DisplayInfo.Protocol == UGA) {
-    DisplayInfo.UGA->Blt (
-                        DisplayInfo.UGA,
+  } else if (mDisplayInfo.Protocol == UGA) {
+    mDisplayInfo.UGA->Blt (
+                        mDisplayInfo.UGA,
                         &FillColor,
                         EfiUgaVideoFill,
                         0, 0, 0, 0,
-                        DisplayInfo.HorizontalResolution, DisplayInfo.VerticalResolution, 0
+                        mDisplayInfo.HorizontalResolution, mDisplayInfo.VerticalResolution, 0
                         );
   }
 }
@@ -651,12 +654,12 @@ DrawImage (
     return;
   }
 
-  if (Image == NULL || DrawWidth == 0 || DrawHeight == 0) {
+  if ((Image == NULL) || (DrawWidth == 0) || (DrawHeight == 0)) {
     PrintDebug (L"No image to draw\n");
     return;
   }
-  if ((ScreenX + DrawWidth) > DisplayInfo.HorizontalResolution
-    || (ScreenY + DrawHeight) > DisplayInfo.VerticalResolution
+  if (((ScreenX + DrawWidth) > mDisplayInfo.HorizontalResolution)
+    || ((ScreenY + DrawHeight) > mDisplayInfo.VerticalResolution)
     )
   {
     PrintDebug (L"Image too big to draw on screen\n");
@@ -665,17 +668,17 @@ DrawImage (
 
   SwitchToGraphics (FALSE);
 
-  if (DisplayInfo.Protocol == GOP) {
-    DisplayInfo.GOP->Blt (
-                        DisplayInfo.GOP,
+  if (mDisplayInfo.Protocol == GOP) {
+    mDisplayInfo.GOP->Blt (
+                        mDisplayInfo.GOP,
                         (EFI_GRAPHICS_OUTPUT_BLT_PIXEL *)Image->PixelData,
                         EfiBltBufferToVideo,
                         SpriteX, SpriteY, ScreenX, ScreenY,
                         DrawWidth, DrawHeight, 0
                         );
-  } else if (DisplayInfo.Protocol == UGA) {
-    DisplayInfo.UGA->Blt (
-                        DisplayInfo.UGA,
+  } else if (mDisplayInfo.Protocol == UGA) {
+    mDisplayInfo.UGA->Blt (
+                        mDisplayInfo.UGA,
                         (EFI_UGA_PIXEL *)Image->PixelData,
                         EfiUgaBltBufferToVideo,
                         SpriteX, SpriteY, ScreenX, ScreenY,
@@ -694,17 +697,19 @@ DrawImageCentered (
   UINTN       PositionX;
   UINTN       PositionY;
 
+  if (Image == NULL) {
+    return;
+  }
+
   if (EFI_ERROR (EnsureDisplayAvailable ())) {
     PrintDebug (L"No display adapters found, unable to draw centered image\n");
     return;
   }
 
   Status = CalculatePositionForCenter (Image->Width, Image->Height, &PositionX, &PositionY);
-  if (EFI_ERROR (Status)) {
-    return;
+  if (!EFI_ERROR (Status)) {
+    DrawImage (Image, Image->Width, Image->Height, PositionX, PositionY, 0, 0);
   }
-
-  DrawImage (Image, Image->Width, Image->Height, PositionX, PositionY, 0, 0);
 }
 
 
@@ -719,6 +724,10 @@ AnimateImage (
   UINTN       MsPerFrame = 20;
   UINTN       PositionX;
   UINTN       PositionY;
+
+  if (Image == NULL) {
+    return;
+  }
 
   if (Image->Width == Image->Height) {
     // animation called by mistake, just show on screen
@@ -750,25 +759,35 @@ AnimateImage (
 
 
 VOID
-SwitchToText (
-  IN  BOOLEAN   Force
+SwitchToMode (
+  IN  EFI_CONSOLE_CONTROL_SCREEN_MODE   NewMode,
+  IN  BOOLEAN                           Force
   )
 {
   EFI_CONSOLE_CONTROL_SCREEN_MODE   CurrentMode;
   EFI_STATUS                        Status;
   EFI_CONSOLE_CONTROL_PROTOCOL      *ConsoleControl;
 
-  Status = gBS->LocateProtocol (&gEfiConsoleControlProtocolGuid, NULL, (VOID **)&ConsoleControl);
-  if (EFI_ERROR (Status)) {
-    ConsoleControl = NULL;
+  if ((NewMode != EfiConsoleControlScreenText) || (NewMode != EfiConsoleControlScreenGraphics)) {
+    return;
   }
 
-  if (ConsoleControl != NULL) {
+  Status = gBS->LocateProtocol (&gEfiConsoleControlProtocolGuid, NULL, (VOID **)&ConsoleControl);
+  if (!EFI_ERROR (Status)) {
     Status = ConsoleControl->GetMode (ConsoleControl, &CurrentMode, NULL, NULL);
-    if (Force || (!EFI_ERROR (Status) && CurrentMode != EfiConsoleControlScreenText)) {
-      ConsoleControl->SetMode (ConsoleControl, EfiConsoleControlScreenText);
+    if (Force || (!EFI_ERROR (Status) && (CurrentMode != NewMode))) {
+      ConsoleControl->SetMode (ConsoleControl, NewMode);
     }
   }
+}
+
+
+VOID
+SwitchToText (
+  IN  BOOLEAN   Force
+  )
+{
+  SwitchToMode (EfiConsoleControlScreenText, Force);
 }
 
 
@@ -777,20 +796,5 @@ SwitchToGraphics (
   IN  BOOLEAN   Force
   )
 {
-
-  EFI_CONSOLE_CONTROL_SCREEN_MODE   CurrentMode;
-  EFI_STATUS                        Status;
-  EFI_CONSOLE_CONTROL_PROTOCOL      *ConsoleControl;
-
-  Status = gBS->LocateProtocol (&gEfiConsoleControlProtocolGuid, NULL, (VOID **)&ConsoleControl);
-  if (EFI_ERROR (Status)) {
-    ConsoleControl = NULL;
-  }
-
-  if (ConsoleControl != NULL) {
-    Status = ConsoleControl->GetMode (ConsoleControl, &CurrentMode, NULL, NULL);
-    if (Force || (!EFI_ERROR (Status) && CurrentMode != EfiConsoleControlScreenGraphics)) {
-      ConsoleControl->SetMode (ConsoleControl, EfiConsoleControlScreenGraphics);
-    }
-  }
+  SwitchToMode (EfiConsoleControlScreenGraphics, Force);
 }
