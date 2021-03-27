@@ -31,6 +31,8 @@
   UefiLib|MdePkg/Library/UefiLib/UefiLib.inf
   UefiRuntimeServicesTableLib|MdePkg/Library/UefiRuntimeServicesTableLib/UefiRuntimeServicesTableLib.inf
 
+  IniParsingLib|SignedCapsulePkg/Library/IniParsingLib/IniParsingLib.inf
+
 [Components]
   UefiSevenPkg/Platform/UefiSeven/UefiSeven.inf
 

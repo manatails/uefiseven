@@ -33,7 +33,7 @@ EFI_HANDLE                  mUefiSevenImage       = NULL;
 EFI_LOADED_IMAGE_PROTOCOL   *mUefiSevenImageInfo  = NULL;
 BOOLEAN                     mVerboseMode          = FALSE;
 BOOLEAN                     mSkipErrors           = FALSE;
-BOOLEAN                     mForceFakevesa        = FALSE;
+BOOLEAN                     mForceFakeVesa        = FALSE;
 
 
 /**
@@ -546,6 +546,83 @@ WaitForEnterAndStall (
 }
 
 
+BOOLEAN
+ReadConfig (
+  VOID
+  )
+{
+  EFI_STATUS  Status;
+  CHAR16      *FilePath = NULL;
+  CHAR16      *TmpFilePath = NULL;
+  UINT8       *FileContents;
+  UINTN       FileBytes;
+  VOID        *Context;
+  UINTN       Num;
+
+  if (mUefiSevenImageInfo == NULL) {
+    return FALSE;
+  }
+
+  TmpFilePath = PathCleanUpDirectories (ConvertDevicePathToText (mUefiSevenImageInfo->FilePath, FALSE, FALSE));
+  if (TmpFilePath == NULL) {
+    return FALSE;
+  }
+
+  //
+  // Preferred UefiSeven.ini, instead of bootx64.ini / bootmgfw.ini.
+  //
+  // Check if <MyName>.ini exists
+  //Status = ChangeExtension (TmpFilePath, L"ini", (VOID **)&FilePath);
+  // Check if UefiSeven.ini exists
+  Status = GetFilenameInSameDirectory (TmpFilePath, L"UefiSeven.ini", (VOID **)&FilePath);
+
+  FreePool (TmpFilePath);
+
+  if (EFI_ERROR (Status) || (FilePath == NULL) || !FileExists (FilePath)) {
+    if (FilePath != NULL) {
+      FreePool (FilePath);
+    }
+    return FALSE;
+  }
+
+  // Read file contents.
+  Status = FileRead (FilePath, (VOID **)&FileContents, &FileBytes);
+  FreePool (FilePath);
+  if (EFI_ERROR (Status)) {
+    return FALSE;
+  }
+
+  Context = OpenIniFile (FileContents, FileBytes);
+  if (Context == NULL) {
+    return FALSE;
+  }
+
+  //
+  // Check if we should skip warnings and prompts
+  //
+  Status          = GetDecimalUintnFromDataFile (Context, "config", "skiperrors", &Num);
+  mSkipErrors     = (!EFI_ERROR (Status) && (Num == 1));
+
+  //
+  // Check if we should force fakevesa
+  //
+  Status          = GetDecimalUintnFromDataFile (Context, "config", "force_fakevesa", &Num);
+  mForceFakeVesa  = (!EFI_ERROR (Status) && (Num == 1));
+
+  //
+  // Check if we should run in verbose mode
+  //
+  Status          = GetDecimalUintnFromDataFile (Context, "config", "verbose", &Num);
+  mVerboseMode    = (!EFI_ERROR (Status) && (Num == 1));
+
+  CloseIniFile (Context);
+
+  FreePool (FileContents);
+
+  return TRUE;
+}
+
+
 /**
   The entry point for the application.
 
@@ -610,30 +687,35 @@ UefiMain (
   }
 
   //
-  // Check if we should skip warnings and prompts
+  // Read <config>.ini, fallback to check existence of old UefiSeven.* files.
   //
-  Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.skiperrors", (VOID **)&SkipFilePath);
-  if (!EFI_ERROR (Status)) {
-    mSkipErrors = FileExists (SkipFilePath);
-    FreePool (SkipFilePath);
-  }
+  if (!ReadConfig ()) {
+    //
+    // Check if we should skip warnings and prompts
+    //
+    Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.skiperrors", (VOID **)&SkipFilePath);
+    if (!EFI_ERROR (Status)) {
+      mSkipErrors = FileExists (SkipFilePath);
+      FreePool (SkipFilePath);
+    }
 
-  //
-  // Check if we should force fakevesa
-  //
-  Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.force_fakevesa", (VOID **)&FFVFilePath);
-  if (!EFI_ERROR (Status)) {
-    mForceFakevesa = FileExists (FFVFilePath);
-    FreePool (FFVFilePath);
-  }
+    //
+    // Check if we should force fakevesa
+    //
+    Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.force_fakevesa", (VOID **)&FFVFilePath);
+    if (!EFI_ERROR (Status)) {
+      mForceFakeVesa = FileExists (FFVFilePath);
+      FreePool (FFVFilePath);
+    }
 
-  //
-  // Check if we should run in verbose mode
-  //
-  Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.verbose", (VOID **)&VerboseFilePath);
-  if (!EFI_ERROR (Status)) {
-    mVerboseMode = FileExists (VerboseFilePath);
-    FreePool (VerboseFilePath);
+    //
+    // Check if we should run in verbose mode
+    //
+    Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.verbose", (VOID **)&VerboseFilePath);
+    if (!EFI_ERROR (Status)) {
+      mVerboseMode = FileExists (VerboseFilePath);
+      FreePool (VerboseFilePath);
+    }
   }
 
   //
@@ -684,7 +766,7 @@ UefiMain (
   // If an Int10h handler exists there either is a real
   // VGA ROM in operation or we installed the shim before.
   //
-  if (!mForceFakevesa) {
+  if (!mForceFakeVesa) {
     if (IsInt10hHandlerDefined ()) {
       PrintDebug (L"Int10h already has a handler, no further action required\n");
       goto Exit;

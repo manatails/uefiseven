@@ -35,6 +35,7 @@
 
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
+#include <Library/IniParsingLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/MtrrLib.h>
 #include <Library/PrintLib.h>

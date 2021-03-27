@@ -16,6 +16,8 @@ Move UefiSeven.efi -> bootmgfw.efi
 
 ## Settings
 
+UefiSeven will try to read UefiSeven.ini as main setting from now, and fallback to get old files bellow if it doesn't exists.
+
 Currently settings can be applied by creating empty files of specific name in the directory containing the target efi file.
 
 * UefiSeven.verbose : Enables verbose mode

@@ -34,13 +34,15 @@
   IntelFrameworkPkg/IntelFrameworkPkg.dec
   MdeModulePkg/MdeModulePkg.dec
   MdePkg/MdePkg.dec
-  UefiCpuPkg/UefiCpuPkg.dec
   OvmfPkg/OvmfPkg.dec
+  SignedCapsulePkg/SignedCapsulePkg.dec
+  UefiCpuPkg/UefiCpuPkg.dec
   UefiSevenPkg/UefiSevenPkg.dec
 
 [LibraryClasses]
   BaseMemoryLib
   DevicePathLib
+  IniParsingLib
   IoLib
   MemoryAllocationLib
   MtrrLib
