@@ -23,7 +23,7 @@
   -----------------------------------------------------------------------------
 **/
 
-#define DEBUG_MESSAGE_LENGTH  0x100
+#define DEBUG_MESSAGE_LENGTH  1024
 
 
 

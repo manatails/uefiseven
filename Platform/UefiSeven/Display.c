@@ -768,7 +768,7 @@ SwitchToMode (
   EFI_STATUS                        Status;
   EFI_CONSOLE_CONTROL_PROTOCOL      *ConsoleControl;
 
-  if ((NewMode != EfiConsoleControlScreenText) || (NewMode != EfiConsoleControlScreenGraphics)) {
+  if ((NewMode != EfiConsoleControlScreenText) && (NewMode != EfiConsoleControlScreenGraphics)) {
     return;
   }
 

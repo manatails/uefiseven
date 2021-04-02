@@ -46,9 +46,15 @@
   -----------------------------------------------------------------------------
 **/
 
+EFI_FILE_INFO *
+GetFileInfo (
+  IN  EFI_FILE_HANDLE    FileHandle
+  );
+
 BOOLEAN
 FileExists (
-  IN  CHAR16  *FilePath
+  IN  EFI_FILE_HANDLE   VolumeRoot,
+  IN  CHAR16            *FilePath
   );
 
 EFI_STATUS
@@ -72,15 +78,30 @@ GetBaseFilename (
 
 EFI_STATUS
 FileRead (
-  IN  CHAR16  *FilePath,
-  OUT VOID    **FileContents,
-  OUT UINTN   *FileBytes
+  IN  EFI_FILE_HANDLE   VolumeRoot,
+  IN  CHAR16            *FilePath,
+  OUT VOID              **FileContents,
+  OUT UINTN             *FileBytes
   );
 
 EFI_STATUS
 Launch (
   IN  CHAR16  *FilePath,
   IN  VOID    (*WaitForEnterCallback) (BOOLEAN)
+  );
+
+BOOLEAN
+FileDelete (
+  IN  EFI_FILE_HANDLE   VolumeRoot,
+  IN  CHAR16            *FilePath
+  );
+
+BOOLEAN
+FileWrite (
+  IN  EFI_FILE_HANDLE   VolumeRoot,
+  IN  CHAR16            *FilePath,
+  IN  UINT8             *Buffer,
+  IN  UINTN             BufferSize
   );
 
 

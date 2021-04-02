@@ -24,6 +24,39 @@
 **/
 
 
+EFI_FILE_INFO *
+GetFileInfo (
+  IN  EFI_FILE_HANDLE    FileHandle
+  )
+{
+  EFI_FILE_INFO   *FileInfo;
+  UINTN           FileInfoSize;
+  EFI_STATUS      Status;
+
+  FileInfo      = NULL;
+  FileInfoSize  = 0;
+  Status        = FileHandle->GetInfo (FileHandle, &gEfiFileInfoGuid, &FileInfoSize, FileInfo);
+
+  if (Status == EFI_BUFFER_TOO_SMALL) {
+    FileInfo = AllocatePool (FileInfoSize);
+    if (FileInfo == NULL) {
+      Status = EFI_OUT_OF_RESOURCES;
+    } else {
+      Status = FileHandle->GetInfo (FileHandle, &gEfiFileInfoGuid, &FileInfoSize, FileInfo);
+    }
+  }
+
+  if (EFI_ERROR (Status)) {
+    if (FileInfo != NULL) {
+      FreePool (FileInfo);
+      FileInfo = NULL;
+    }
+  }
+
+  return FileInfo;
+}
+
+
 /**
   Creates a new string representing path to a file identical
   to the one specified as input but with a different extension.
@@ -193,44 +226,94 @@ GetBaseFilename (
 **/
 BOOLEAN
 FileExists (
-  IN  CHAR16  *FilePath
+  IN  EFI_FILE_HANDLE   VolumeRoot,
+  IN  CHAR16            *FilePath
   )
 {
-  EFI_STATUS              Status;
-  EFI_FILE_IO_INTERFACE   *Volume;
-  EFI_FILE_HANDLE         VolumeRoot;
-  EFI_FILE_HANDLE         RequestedFile;
+  EFI_STATUS        Status;
+  EFI_FILE_HANDLE   RequestedFile;
 
-  if ((FilePath == NULL) || (mUefiSevenImageInfo == NULL)) {
+  if ((VolumeRoot == NULL) || (FilePath == NULL)) {
     return FALSE;
-  }
-
-  // Open volume where UefiSeven resides.
-  Status = gBS->HandleProtocol (mUefiSevenImageInfo->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Volume);
-  if (EFI_ERROR (Status)) {
-    PrintDebug (L"Unable to find simple file system protocol (error: %r)\n", Status);
-    return FALSE;
-  } else {
-    PrintDebug (L"Found simple file system protocol\n");
-  }
-  Status = Volume->OpenVolume (Volume, &VolumeRoot);
-  if (EFI_ERROR (Status)) {
-    PrintDebug (L"Unable to open volume (error: %r)\n", Status);
-    return FALSE;
-  } else {
-    PrintDebug (L"Opened volume\n");
   }
 
   // Try to open file for reading.
   Status = VolumeRoot->Open (VolumeRoot, &RequestedFile, FilePath, EFI_FILE_MODE_READ, 0);
   if (EFI_ERROR (Status)) {
     PrintDebug (L"Unable to open file '%s' for reading (error: %r)\n", FilePath, Status);
-    VolumeRoot->Close (VolumeRoot);
     return FALSE;
   } else {
     PrintDebug (L"Opened file '%s' for reading\n", FilePath);
     RequestedFile->Close (RequestedFile);
-    VolumeRoot->Close (VolumeRoot);
+    return TRUE;
+  }
+}
+
+BOOLEAN
+FileDelete (
+  IN  EFI_FILE_HANDLE   VolumeRoot,
+  IN  CHAR16            *FilePath
+  )
+{
+  EFI_STATUS        Status;
+  EFI_FILE_HANDLE   RequestedFile;
+  EFI_FILE_INFO     *FileInfo;
+
+  if ((VolumeRoot == NULL) || (FilePath == NULL)) {
+    return FALSE;
+  }
+
+  // Try to open file for deleting.
+  Status = VolumeRoot->Open (VolumeRoot, &RequestedFile, FilePath, EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE, 0);
+  if (EFI_ERROR (Status)) {
+    PrintDebug (L"Unable to open file '%s' for deleting (error: %r)\n", FilePath, Status);
+    return FALSE;
+  } else {
+    PrintDebug (L"Opened file '%s' for deleting\n", FilePath);
+    FileInfo = GetFileInfo (RequestedFile);
+    if (FileInfo != NULL) {
+      // Delete if its not directory.
+      if ((FileInfo->Attribute & EFI_FILE_DIRECTORY) == 0) {
+        RequestedFile->Delete (RequestedFile);
+      }
+      FreePool (FileInfo);
+    }
+    return TRUE;
+  }
+}
+
+BOOLEAN
+FileWrite (
+  IN  EFI_FILE_HANDLE   VolumeRoot,
+  IN  CHAR16            *FilePath,
+  IN  UINT8             *Buffer,
+  IN  UINTN             BufferSize
+  )
+{
+  EFI_STATUS        Status;
+  EFI_FILE_HANDLE   RequestedFile;
+  EFI_FILE_INFO     *FileInfo;
+
+  if ((VolumeRoot == NULL) || (FilePath == NULL) || (Buffer == NULL) || (BufferSize == 0)) {
+    return FALSE;
+  }
+
+  // Try to open file for writing.
+  Status = VolumeRoot->Open (VolumeRoot, &RequestedFile, FilePath, EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE, 0);
+  if (EFI_ERROR (Status)) {
+    PrintDebug (L"Unable to open file '%s' for writing (error: %r)\n", FilePath, Status);
+    return FALSE;
+  } else {
+    PrintDebug (L"Opened file '%s' for writing\n", FilePath);
+    FileInfo = GetFileInfo (RequestedFile);
+    if (FileInfo != NULL) {
+      // Write if its not directory.
+      if ((FileInfo->Attribute & EFI_FILE_DIRECTORY) == 0) {
+        RequestedFile->Write (RequestedFile, &BufferSize, Buffer);
+        RequestedFile->Close (RequestedFile);
+      }
+      FreePool (FileInfo);
+    }
     return TRUE;
   }
 }
@@ -263,37 +346,19 @@ FileExists (
 **/
 EFI_STATUS
 FileRead (
-  IN  CHAR16  *FilePath,
-  OUT VOID    **FileContents,
-  OUT UINTN   *FileBytes
+  IN  EFI_FILE_HANDLE   VolumeRoot,
+  IN  CHAR16            *FilePath,
+  OUT VOID              **FileContents,
+  OUT UINTN             *FileBytes
   )
 {
   EFI_STATUS              Status;
-  EFI_FILE_IO_INTERFACE   *Volume;
-  EFI_FILE_HANDLE         VolumeRoot = NULL;
   EFI_FILE_HANDLE         File = NULL;
   EFI_FILE_INFO           *FileInfo;
   UINTN                   Size;
 
-  if ((FilePath == NULL) || (FileContents == NULL) || (FileBytes == NULL) || (mUefiSevenImageInfo == NULL)) {
+  if ((VolumeRoot == NULL) || (FilePath == NULL) || (FileContents == NULL) || (FileBytes == NULL)) {
     return EFI_INVALID_PARAMETER;
-  }
-
-  // Open volume where UefiSeven resides.
-  Status = gBS->HandleProtocol (mUefiSevenImageInfo->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Volume);
-  if (EFI_ERROR (Status)) {
-    PrintDebug (L"Unable to find simple file system protocol (error: %r)\n", Status);
-    goto Exit;
-  } else {
-    PrintDebug (L"Found simple file system protocol\n");
-  }
-
-  Status = Volume->OpenVolume (Volume, &VolumeRoot);
-  if (EFI_ERROR (Status)) {
-    PrintDebug (L"Unable to open volume (error: %r)\n", Status);
-    goto Exit;
-  } else {
-    PrintDebug (L"Opened volume\n");
   }
 
   // Try to open file for reading.
@@ -306,16 +371,11 @@ FileRead (
   }
 
   // First gather information on total file size.
-  File->GetInfo (File, &gEfiFileInfoGuid, &Size, NULL);
-  FileInfo = AllocatePool (Size);
+  FileInfo = GetFileInfo (File);
   if (FileInfo == NULL) {
-    PrintDebug (L"Unable to allocate %u bytes for file info\n", Size);
-    Status = EFI_OUT_OF_RESOURCES;
+    Status = EFI_UNSUPPORTED;
     goto Exit;
-  } else {
-    PrintDebug (L"Allocated %u bytes for file info\n", Size);
   }
-  File->GetInfo (File, &gEfiFileInfoGuid, &Size, FileInfo);
   Size = FileInfo->FileSize;
   FreePool (FileInfo);
 
@@ -335,7 +395,7 @@ FileRead (
     PrintDebug (L"Unable to read file contents (error: %r)\n", Status);
     goto Exit;
   } else {
-    PrintDebug (L"Read file contents\n", Status);
+    PrintDebug (L"Read file contents success\n");
     *FileBytes = Size;
   }
 
@@ -348,9 +408,6 @@ FileRead (
   }
   if (File != NULL) {
     File->Close (File);
-  }
-  if (VolumeRoot != NULL) {
-    VolumeRoot->Close (VolumeRoot);
   }
 
   return Status;
@@ -383,12 +440,11 @@ CheckBootMgrGuid (
     )
   {
     if (CompareGuid ((CONST EFI_GUID *)Address, &gBcdWindowsBootmgrGuid)) {
+      PrintDebug (L"Found %g\n", &gBcdWindowsBootmgrGuid);
       Status = EFI_SUCCESS;
       break;
     }
   }
-
-  PrintDebug (L"CheckBootMgrGuid - %r\n", Status);
 
   return Status;
 }

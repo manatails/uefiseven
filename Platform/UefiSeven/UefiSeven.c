@@ -34,6 +34,10 @@ EFI_LOADED_IMAGE_PROTOCOL   *mUefiSevenImageInfo  = NULL;
 BOOLEAN                     mVerboseMode          = FALSE;
 BOOLEAN                     mSkipErrors           = FALSE;
 BOOLEAN                     mForceFakeVesa        = FALSE;
+BOOLEAN                     mLogToFile            = FALSE;
+CHAR16                      *mEfiFilePath         = NULL;
+EFI_FILE_HANDLE             mVolumeRoot           = NULL;
+EFI_FILE_HANDLE             mLogFileHandle        = NULL;
 
 
 /**
@@ -89,9 +93,9 @@ ShimVesaInformation (
   BufferPtr += sizeof (VENDOR_NAME);
   VbeInfo->Capabilities                 = BIT0;     // DAC width supports 8-bit color mode
   VbeInfo->ModeListAddress              = (UINT32)StartAddress << 12 | (UINT16)(UINTN)BufferPtr;
-  *(UINT16*)BufferPtr = 0x00F1;   // mode number
+  *(UINT16 *)BufferPtr = 0x00F1;   // mode number
   BufferPtr += 2;
-  *(UINT16*)BufferPtr = 0xFFFF;   // mode list terminator
+  *(UINT16 *)BufferPtr = 0xFFFF;   // mode list terminator
   BufferPtr += 2;
   VbeInfo->VideoMem64K                  = (UINT16)((mDisplayInfo.FrameBufferSize + 65535) / 65536);
   VbeInfo->OemSoftwareVersion           = 0x0000;
@@ -264,8 +268,8 @@ EnsureMemoryLock (
 {
   EFI_STATUS                    Status = EFI_NOT_READY;
   UINT32                        Granularity;
-  EFI_LEGACY_REGION_PROTOCOL    *mLegacyRegion = NULL;
-  EFI_LEGACY_REGION2_PROTOCOL   *mLegacyRegion2 = NULL;
+  EFI_LEGACY_REGION_PROTOCOL    *LegacyRegion;
+  EFI_LEGACY_REGION2_PROTOCOL   *LegacyRegion2;
   CONST CHAR16                  *OperationStr;
 
   if ((StartAddress == 0) || (Length == 0)) {
@@ -298,13 +302,13 @@ EnsureMemoryLock (
   // Try to lock/unlock with EfiLegacyRegionProtocol.
   //
   if (EFI_ERROR (Status)) {
-    Status = gBS->LocateProtocol (&gEfiLegacyRegionProtocolGuid, NULL, (VOID **)&mLegacyRegion);
+    Status = gBS->LocateProtocol (&gEfiLegacyRegionProtocolGuid, NULL, (VOID **)&LegacyRegion);
     if (!EFI_ERROR (Status)) {
       if (Operation == UNLOCK) {
-        /*Status =*/ mLegacyRegion->UnLock (mLegacyRegion, (UINT32)StartAddress, Length, &Granularity);
+        /*Status =*/ LegacyRegion->UnLock (LegacyRegion, (UINT32)StartAddress, Length, &Granularity);
         Status = CanWriteAtAddress (StartAddress) ? EFI_SUCCESS : EFI_DEVICE_ERROR;
       } else {
-        /*Status =*/ mLegacyRegion->Lock (mLegacyRegion, (UINT32)StartAddress, Length, &Granularity);
+        /*Status =*/ LegacyRegion->Lock (LegacyRegion, (UINT32)StartAddress, Length, &Granularity);
         Status = CanWriteAtAddress (StartAddress) ? EFI_DEVICE_ERROR : EFI_SUCCESS;
       }
 
@@ -319,13 +323,13 @@ EnsureMemoryLock (
   // Try to lock/unlock with EfiLegacyRegion2Protocol.
   //
   if (EFI_ERROR (Status)) {
-    Status = gBS->LocateProtocol (&gEfiLegacyRegion2ProtocolGuid, NULL, (VOID **)&mLegacyRegion2);
+    Status = gBS->LocateProtocol (&gEfiLegacyRegion2ProtocolGuid, NULL, (VOID **)&LegacyRegion2);
     if (!EFI_ERROR (Status)) {
       if (Operation == UNLOCK) {
-        /*Status =*/ mLegacyRegion2->UnLock (mLegacyRegion2, (UINT32)StartAddress, Length, &Granularity);
+        /*Status =*/ LegacyRegion2->UnLock (LegacyRegion2, (UINT32)StartAddress, Length, &Granularity);
         Status = CanWriteAtAddress (StartAddress) ? EFI_SUCCESS : EFI_DEVICE_ERROR;;
       } else {
-        /*Status =*/ mLegacyRegion2->Lock (mLegacyRegion2, (UINT32)StartAddress, Length, &Granularity);
+        /*Status =*/ LegacyRegion2->Lock (LegacyRegion2, (UINT32)StartAddress, Length, &Granularity);
         Status = CanWriteAtAddress (StartAddress) ? EFI_DEVICE_ERROR : EFI_SUCCESS;
       }
 
@@ -385,7 +389,7 @@ CanWriteAtAddress (
   UINT8     *TestPtr;
   UINT8     OldValue;
 
-  TestPtr = (UINT8*)(Address);
+  TestPtr = (UINT8 *)(Address);
   OldValue = *TestPtr;
 
   *TestPtr = *TestPtr + 1;
@@ -421,22 +425,17 @@ ShowAnimatedLogo (
 {
   EFI_STATUS  Status;
   CHAR16      *BmpFilePath = NULL;
-  CHAR16      *MyFilePath = NULL;
   UINT8       *BmpFileContents;
   UINTN       BmpFileBytes;
   IMAGE       *WindowsFlag = NULL;
 
-  if (mUefiSevenImageInfo == NULL) {
+  if (mEfiFilePath == NULL) {
     return FALSE;
   }
 
   // Check if <MyName>.bmp exists
-  MyFilePath = PathCleanUpDirectories (ConvertDevicePathToText (mUefiSevenImageInfo->FilePath, FALSE, FALSE));
-  if (MyFilePath != NULL) {
-    Status = ChangeExtension (MyFilePath, L"bmp", (VOID **)&BmpFilePath);
-    FreePool (MyFilePath);
-  }
-  if (EFI_ERROR (Status) || (BmpFilePath == NULL) || !FileExists (BmpFilePath)) {
+  Status = ChangeExtension (mEfiFilePath, L"bmp", (VOID **)&BmpFilePath);
+  if (EFI_ERROR (Status) || (BmpFilePath == NULL) || !FileExists (mVolumeRoot, BmpFilePath)) {
     if (BmpFilePath != NULL) {
       FreePool (BmpFilePath);
     }
@@ -444,7 +443,7 @@ ShowAnimatedLogo (
   }
 
   // Read file contents.
-  Status = FileRead (BmpFilePath, (VOID **)&BmpFileContents, &BmpFileBytes);
+  Status = FileRead (mVolumeRoot, BmpFilePath, (VOID **)&BmpFileContents, &BmpFileBytes);
   FreePool (BmpFilePath);
   if (EFI_ERROR (Status)) {
     return FALSE;
@@ -479,39 +478,62 @@ PrintFuncNameMessage (
   VA_LIST   Marker;
   CHAR16    *Buffer;
   UINTN     BufferSize;
+  CHAR8     *AsciiBuffer;
+  UINTN     AsciiBufferSize;
 
-  if ((FuncName == NULL) || (FormatString == NULL) || !(IsError || mVerboseMode)) {
+  if ((FuncName == NULL) || (FormatString == NULL) || !(IsError || mVerboseMode || mLogToFile)) {
     return;
   }
-
-  //
-  // Switch to text mode if needed.
-  //
-  SwitchToText (FALSE);
 
   //
   // Generate the main message.
   //
   BufferSize = DEBUG_MESSAGE_LENGTH * sizeof (CHAR16);
   Buffer = (CHAR16 *)AllocatePool (BufferSize);
+  if (Buffer == NULL) {
+    return;
+  }
   VA_START (Marker, FormatString);
   UnicodeVSPrint (Buffer, BufferSize, FormatString, Marker);
   VA_END (Marker);
 
-  //
-  // Output using apropriate colors.
-  //
-  gST->ConOut->SetAttribute (gST->ConOut, EFI_DARKGRAY);
-  AsciiPrint ("%.10a ", FuncName);
-  gST->ConOut->SetAttribute (gST->ConOut, IsError ? EFI_YELLOW : EFI_LIGHTGRAY);
-  if ((gST != NULL) && (gST->ConOut != NULL)) {
-    gST->ConOut->OutputString (gST->ConOut, Buffer);
+  if (IsError || mVerboseMode) {
+    //
+    // Switch to text mode if needed.
+    //
+    SwitchToText (FALSE);
+
+    //
+    // Output using apropriate colors.
+    //
+    gST->ConOut->SetAttribute (gST->ConOut, EFI_DARKGRAY);
+    AsciiPrint ("%.10a ", FuncName);
+    gST->ConOut->SetAttribute (gST->ConOut, IsError ? EFI_YELLOW : EFI_LIGHTGRAY);
+    if ((gST != NULL) && (gST->ConOut != NULL)) {
+      gST->ConOut->OutputString (gST->ConOut, Buffer);
+    }
+
+    //
+    // Cleanup.
+    //
+    gST->ConOut->SetAttribute (gST->ConOut, EFI_LIGHTGRAY);
   }
 
-  //
-  // Cleanup.
-  //
-  gST->ConOut->SetAttribute (gST->ConOut, EFI_LIGHTGRAY);
+  if (mLogToFile) {
+    if (mLogFileHandle != NULL) {
+      AsciiBufferSize = AsciiStrLen (FuncName) + 2 + StrLen (Buffer) + 1;
+      AsciiBuffer = AllocatePool (AsciiBufferSize);
+      if (AsciiBuffer != NULL) {
+        AsciiSPrint (AsciiBuffer, AsciiBufferSize, "%a: %s", FuncName, Buffer);
+        AsciiBufferSize = AsciiStrLen (AsciiBuffer);
+        mLogFileHandle->SetPosition (mLogFileHandle, (UINT64)-1);
+        mLogFileHandle->Write (mLogFileHandle, &AsciiBufferSize, AsciiBuffer);
+        mLogFileHandle->Flush (mLogFileHandle);
+        FreePool (AsciiBuffer);
+      }
+    }
+  }
+
   FreePool (Buffer);
 }
 
@@ -553,18 +575,12 @@ ReadConfig (
 {
   EFI_STATUS  Status;
   CHAR16      *FilePath = NULL;
-  CHAR16      *TmpFilePath = NULL;
   UINT8       *FileContents;
   UINTN       FileBytes;
   VOID        *Context;
   UINTN       Num;
 
-  if (mUefiSevenImageInfo == NULL) {
-    return FALSE;
-  }
-
-  TmpFilePath = PathCleanUpDirectories (ConvertDevicePathToText (mUefiSevenImageInfo->FilePath, FALSE, FALSE));
-  if (TmpFilePath == NULL) {
+  if (mEfiFilePath == NULL) {
     return FALSE;
   }
 
@@ -572,13 +588,11 @@ ReadConfig (
   // Preferred UefiSeven.ini, instead of bootx64.ini / bootmgfw.ini.
   //
   // Check if <MyName>.ini exists
-  //Status = ChangeExtension (TmpFilePath, L"ini", (VOID **)&FilePath);
+  //Status = ChangeExtension (mEfiFilePath, L"ini", (VOID **)&FilePath);
   // Check if UefiSeven.ini exists
-  Status = GetFilenameInSameDirectory (TmpFilePath, L"UefiSeven.ini", (VOID **)&FilePath);
+  Status = GetFilenameInSameDirectory (mEfiFilePath, L"UefiSeven.ini", (VOID **)&FilePath);
 
-  FreePool (TmpFilePath);
-
-  if (EFI_ERROR (Status) || (FilePath == NULL) || !FileExists (FilePath)) {
+  if (EFI_ERROR (Status) || (FilePath == NULL) || !FileExists (mVolumeRoot, FilePath)) {
     if (FilePath != NULL) {
       FreePool (FilePath);
     }
@@ -586,7 +600,7 @@ ReadConfig (
   }
 
   // Read file contents.
-  Status = FileRead (FilePath, (VOID **)&FileContents, &FileBytes);
+  Status = FileRead (mVolumeRoot, FilePath, (VOID **)&FileContents, &FileBytes);
   FreePool (FilePath);
   if (EFI_ERROR (Status)) {
     return FALSE;
@@ -614,6 +628,12 @@ ReadConfig (
   //
   Status          = GetDecimalUintnFromDataFile (Context, "config", "verbose", &Num);
   mVerboseMode    = (!EFI_ERROR (Status) && (Num == 1));
+
+  //
+  // Check if we should log to file
+  //
+  Status          = GetDecimalUintnFromDataFile (Context, "config", "logfile", &Num);
+  mLogToFile      = (!EFI_ERROR (Status) && (Num == 1));
 
   CloseIniFile (Context);
 
@@ -650,10 +670,12 @@ UefiMain (
   EFI_STATUS              IvtFreeStatus;
   EFI_INPUT_KEY           Key;
   CHAR16                  *LaunchPath = NULL;
-  CHAR16                  *EfiFilePath = NULL;
+  CHAR16                  *LogFilePath = NULL;
   CHAR16                  *VerboseFilePath = NULL;
   CHAR16                  *SkipFilePath = NULL;
   CHAR16                  *FFVFilePath = NULL;
+  EFI_FILE_IO_INTERFACE   *Volume;
+  EFI_FILE_INFO           *FileInfo;
 
   //
   // Try freeing IVT memory area in case it has already been allocated.
@@ -680,8 +702,22 @@ UefiMain (
     goto Exit;
   }
 
-  EfiFilePath = PathCleanUpDirectories (ConvertDevicePathToText (mUefiSevenImageInfo->FilePath, FALSE, FALSE));
-  if (EfiFilePath == NULL) {
+  // Open volume where UefiSeven resides.
+  Status = gBS->HandleProtocol (mUefiSevenImageInfo->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID **)&Volume);
+  if (EFI_ERROR (Status)) {
+    PrintError (L"Unable to find simple file system protocol (error: %r)\n", Status);
+    goto Exit;
+  } else {
+    PrintDebug (L"Found simple file system protocol\n");
+  }
+  Status = Volume->OpenVolume (Volume, &mVolumeRoot);
+  if (EFI_ERROR (Status)) {
+    PrintError (L"Unable to open volume (error: %r)\n", Status);
+    goto Exit;
+  }
+
+  mEfiFilePath = PathCleanUpDirectories (ConvertDevicePathToText (mUefiSevenImageInfo->FilePath, FALSE, FALSE));
+  if (mEfiFilePath == NULL) {
     PrintError (L"Unable to locate self-path, aborting\n");
     goto Exit;
   }
@@ -693,28 +729,53 @@ UefiMain (
     //
     // Check if we should skip warnings and prompts
     //
-    Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.skiperrors", (VOID **)&SkipFilePath);
+    Status = GetFilenameInSameDirectory (mEfiFilePath, L"UefiSeven.skiperrors", (VOID **)&SkipFilePath);
     if (!EFI_ERROR (Status)) {
-      mSkipErrors = FileExists (SkipFilePath);
+      mSkipErrors = FileExists (mVolumeRoot, SkipFilePath);
       FreePool (SkipFilePath);
     }
 
     //
     // Check if we should force fakevesa
     //
-    Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.force_fakevesa", (VOID **)&FFVFilePath);
+    Status = GetFilenameInSameDirectory (mEfiFilePath, L"UefiSeven.force_fakevesa", (VOID **)&FFVFilePath);
     if (!EFI_ERROR (Status)) {
-      mForceFakeVesa = FileExists (FFVFilePath);
+      mForceFakeVesa = FileExists (mVolumeRoot, FFVFilePath);
       FreePool (FFVFilePath);
     }
 
     //
     // Check if we should run in verbose mode
     //
-    Status = GetFilenameInSameDirectory (EfiFilePath, L"UefiSeven.verbose", (VOID **)&VerboseFilePath);
+    Status = GetFilenameInSameDirectory (mEfiFilePath, L"UefiSeven.verbose", (VOID **)&VerboseFilePath);
     if (!EFI_ERROR (Status)) {
-      mVerboseMode = FileExists (VerboseFilePath);
+      mVerboseMode = FileExists (mVolumeRoot, VerboseFilePath);
       FreePool (VerboseFilePath);
+    }
+  }
+
+  if (mLogToFile) {
+    mLogToFile = FALSE;
+    Status = GetFilenameInSameDirectory (mEfiFilePath, L"UefiSeven.log", (VOID **)&LogFilePath);
+    if (!EFI_ERROR (Status)) {
+      FileDelete (mVolumeRoot, LogFilePath);
+
+      Status = mVolumeRoot->Open (
+                              mVolumeRoot,
+                              &mLogFileHandle,
+                              LogFilePath,
+                              EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE,
+                              0);
+      if (!EFI_ERROR (Status)) {
+        FileInfo = GetFileInfo (mLogFileHandle);
+        if (FileInfo != NULL) {
+          // Re-enable mLogToFile if its not directory.
+          if ((FileInfo->Attribute & EFI_FILE_DIRECTORY) == 0) {
+            mLogToFile = TRUE;
+          }
+        }
+      }
+      FreePool (LogFilePath);
     }
   }
 
@@ -746,7 +807,7 @@ UefiMain (
   // Windows 7 prefers a 1024x768 resolution.
   //
   SwitchVideoMode (1024, 768);
-  if (mVerboseMode) {
+  if (mVerboseMode || mLogToFile) {
     PrintVideoInfo ();
   }
 
@@ -862,13 +923,12 @@ UefiMain (
   //
   // Check if we can chainload the Windows Boot Manager.
   //
-  if (EfiFilePath != NULL) {
-    Status = ChangeExtension (EfiFilePath, L"original.efi", (VOID **)&LaunchPath);
-    FreePool (EfiFilePath);
+  if (mEfiFilePath != NULL) {
+    Status = ChangeExtension (mEfiFilePath, L"original.efi", (VOID **)&LaunchPath);
   } else {
     Status = EFI_NOT_FOUND;
   }
-  if (!EFI_ERROR (Status) && FileExists (LaunchPath)) {
+  if (!EFI_ERROR (Status) && FileExists (mVolumeRoot, LaunchPath)) {
     PrintDebug (L"Found Windows Boot Manager at '%s'\n", LaunchPath);
   } else {
     PrintError (L"Could not find Windows Boot Manager at '%s'\n", LaunchPath);
@@ -896,6 +956,20 @@ UefiMain (
   if (LaunchPath != NULL) {
     Launch (LaunchPath, mVerboseMode ? &WaitForEnterAndStall : NULL);
     FreePool (LaunchPath);
+  }
+
+  if (mEfiFilePath != NULL) {
+    FreePool (mEfiFilePath);
+  }
+
+  if (mLogToFile) {
+    if (mLogFileHandle != NULL) {
+      mLogFileHandle->Close (mLogFileHandle);
+    }
+  }
+
+  if (mVolumeRoot != NULL) {
+    mVolumeRoot->Close (mVolumeRoot);
   }
 
   return EFI_SUCCESS;
