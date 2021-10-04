@@ -263,13 +263,13 @@ FileDelete (
     return FALSE;
   }
 
-  // Try to open file for deleting.
+  // Try to open file for deletion.
   Status = VolumeRoot->Open (VolumeRoot, &RequestedFile, FilePath, EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE, 0);
   if (EFI_ERROR (Status)) {
-    PrintDebug (L"Unable to open file '%s' for deleting (error: %r)\n", FilePath, Status);
+    PrintDebug (L"Unable to open file '%s' for deletion (error: %r)\n", FilePath, Status);
     return FALSE;
   } else {
-    PrintDebug (L"Opened file '%s' for deleting\n", FilePath);
+    PrintDebug (L"Opened file '%s' for deletion\n", FilePath);
     FileInfo = GetFileInfo (RequestedFile);
     if (FileInfo != NULL) {
       // Delete if its not directory.

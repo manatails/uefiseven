@@ -758,6 +758,7 @@ UefiMain (
     mLogToFile = FALSE;
     Status = GetFilenameInSameDirectory (mEfiFilePath, L"UefiSeven.log", (VOID **)&LogFilePath);
     if (!EFI_ERROR (Status)) {
+	  PrintDebug (L"Clearing previous log file\n");
       FileDelete (mVolumeRoot, LogFilePath);
 
       Status = mVolumeRoot->Open (
