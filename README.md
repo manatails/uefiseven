@@ -14,26 +14,22 @@ Int10h handler comes with a macro, when enabled before compiling, that will enab
 1. Prepare Windows 7 installation USB Drive
 2. Rename bootx64.efi at (UsbDrive)\EFI\Boot\ to bootx64.original.efi
 3. Unpack bootx64.efi from UefiSeven archive and copy it to (UsbDrive)\EFI\Boot\
-4. (Optional) Copy UefiSeven.verbose to the same directory to enable verbose mode
-5. Finish initial installation and wait for reboot prompt
-6. Power off computer
-7. Rename bootmgfw.efi at (HDD)\EFI\Microsoft\Boot\ to bootmgfw.original.efi
-8. Copy UefiSeven bootx64.efi to (HDD)\EFI\Microsoft\Boot\bootmgfw.efi using EFI shell
-9. (Optional) Copy UefiSeven.skiperrors to the same directory to ignore any warning prompts.
+4. Finish initial installation and wait for reboot prompt
+5. Power off computer
+6. Rename bootmgfw.efi at (HDD)\EFI\Microsoft\Boot\ to bootmgfw.original.efi
+7. Copy UefiSeven bootx64.efi to (HDD)\EFI\Microsoft\Boot\bootmgfw.efi using EFI shell
 
 ## Settings
-Currently settings can be applied by creating empty files of specific name in the directory containing the main efi file.
-* UefiSeven.verbose : Enables verbose mode
-* UefiSeven.skiperrors : Skips any warning/error prompts
-* UefiSeven.force_fakevesa : Overwrites Int10h handler with fakevesa even when the native handler is present
+Settings can be applied by placing UefiSeven.ini file in the directory containing the main efi file.
+Refer to the sample configuration file for available options.
 
 ## Build instructions
     git clone https://git.mananet.net/manatails/uefiseven
-    cd UefiSeven
+    (Copy or symlink UefiSevenPkg and IntelFrameworkPkg to the edk2 directory)
     source ./edksetup.sh
     make -C BaseTools/
     ./MdeModulePkg/Application/UefiSeven/Int10hHandler.sh ; Regenerate Int10h assembly. Optional
-    build -a X64 -t GCC49 -b RELEASE -p MdeModulePkg/MdeModulePkg.dsc
+    build -a X64 -t GCC49 -b RELEASE -p UefiSevenPkg/UefiSevenPkg.dsc --conf=UefiSevenPkg/Conf
     
 ## Credits
 * Original VgaShim project
