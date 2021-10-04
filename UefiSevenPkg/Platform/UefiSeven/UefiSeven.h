@@ -1,5 +1,6 @@
 /** @file
 
+  Copyright (c) 2020, Seungjoo Kim
   Copyright (c) 2016, Dawid Ciecierski
 
   This program and the accompanying materials
@@ -12,8 +13,8 @@
 
 **/
 
-#ifndef __VGA_SHIM_H
-#define __VGA_SHIM_H
+#ifndef __UEFI_SEVEN_H
+#define __UEFI_SEVEN_H
 
 
 /**
