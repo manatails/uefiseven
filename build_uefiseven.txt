@@ -2,4 +2,5 @@ Command references for building UefiSeven:
 
 source ./edksetup.sh
 make -C BaseTools/
-build -a X64 -t GCC49 -b RELEASE -p MdeModulePkg/MdeModulePkg.dsc
+build -a X64 -t GCC49 -b RELEASE -p UefiSevenPkg/UefiSevenPkg.dsc --conf=UefiSevenPkg/Conf
+
